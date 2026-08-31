@@ -35,11 +35,16 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-模型导入与场景标定完成后，从 Windows PowerShell 运行：
+模型导入与场景标定完成后，从 Windows PowerShell 运行（脚本默认使用本机已验证的 `E:\AIRobotic\isaac-sim`）：
 
 ```powershell
-$env:ISAAC_SIM_ROOT = "C:\isaacsim"
 .\scripts\run_simulation.ps1
+```
+
+如需使用其他 Isaac Sim 安装目录，可先设置：
+
+```powershell
+$env:ISAAC_SIM_ROOT = "D:\path\to\isaac-sim"
 ```
 
 启动一次五轮抓取：
@@ -61,4 +66,3 @@ mycobot_description/urdf/adaptive_gripper
 ```
 
 许可证保存在 `simulation/urdf/mycobot_description/LICENSE`。
-
