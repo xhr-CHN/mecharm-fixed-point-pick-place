@@ -1,0 +1,17 @@
+api_version: 1.0
+cspace:
+  - joint1_to_base
+  - joint2_to_joint1
+  - joint3_to_joint2
+  - joint4_to_joint3
+  - joint5_to_joint4
+  - joint6_to_joint5
+root_link: base
+default_q: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+cspace_to_urdf_rules:
+  - {name: gripper_controller, rule: fixed, value: 0.15}
+  - {name: gripper_base_to_gripper_left2, rule: fixed, value: 0.0}
+  - {name: gripper_left3_to_gripper_left1, rule: fixed, value: 0.0}
+  - {name: gripper_base_to_gripper_right3, rule: fixed, value: 0.0}
+  - {name: gripper_base_to_gripper_right2, rule: fixed, value: 0.0}
+  - {name: gripper_right3_to_gripper_right1, rule: fixed, value: 0.0}
