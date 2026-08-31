@@ -13,13 +13,9 @@ import time
 import numpy as np
 
 from isaacsim.core.api import World
-from isaacsim.core.prims import Articulation
+from isaacsim.core.prims import SingleArticulation
 from isaacsim.core.utils.extensions import enable_extension
 from isaacsim.core.utils.types import ArticulationAction
-from isaacsim.robot_motion.motion_generation import (
-    ArticulationKinematicsSolver,
-    LulaKinematicsSolver,
-)
 import omni.usd
 from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 
@@ -33,18 +29,19 @@ ARM_JOINTS = (
     "joint6_to_joint5",
 )
 GRIPPER_JOINT = "gripper_controller"
-GRIPPER_MIMIC_JOINTS = (
-    ("gripper_controller", 1.0),
-    ("gripper_base_to_gripper_left2", 1.0),
-    ("gripper_left3_to_gripper_left1", -1.0),
-    ("gripper_base_to_gripper_right3", -1.0),
-    ("gripper_base_to_gripper_right2", -1.0),
-    ("gripper_right3_to_gripper_right1", 1.0),
-)
 ROBOT_PRIM_PATH = "/World/mecharm_270_pi"
 GRIPPER_BODY_PATH = f"{ROBOT_PRIM_PATH}/gripper_base"
 OBJECT_PRIM_PATH = "/World/target_object"
 GRASP_JOINT_PATH = "/World/mecharm_grasp_fixed_joint"
+
+# Joint-space waypoints calibrated from the checked-in mechArm 270 Pi URDF.
+# They avoid the Lula 5.1 startup crash while keeping the ROS 2 pose interface.
+CALIBRATED_WAYPOINTS_DEG = {
+    ("pick", "safe"): (23.093, -0.417, 18.790, -47.647, -2.617, 0.0),
+    ("pick", "grasp"): (23.363, 14.921, 20.671, -47.479, -1.886, 0.0),
+    ("place", "safe"): (-19.315, 0.478, 13.209, -47.445, 12.505, 0.0),
+    ("place", "grasp"): (-19.656, 15.759, 15.709, -47.310, 11.583, 0.0),
+}
 
 
 class MechArmBridge:
@@ -52,13 +49,13 @@ class MechArmBridge:
         self.project_root = Path(project_root)
         self.robot_prim_path = ROBOT_PRIM_PATH
         self.world = World(stage_units_in_meters=1.0)
-        self.robot = Articulation(prim_paths_expr=self.robot_prim_path, name="mecharm_270_pi")
+        self.robot = SingleArticulation(prim_path=self.robot_prim_path, name="mecharm_270_pi")
         self.world.scene.add(self.robot)
         self.world.reset()
         self.robot.initialize()
 
         actual_names = tuple(self.robot.dof_names)
-        required_names = (*ARM_JOINTS, *(name for name, _ in GRIPPER_MIMIC_JOINTS))
+        required_names = (*ARM_JOINTS, GRIPPER_JOINT)
         missing = [name for name in required_names if name not in actual_names]
         if missing:
             raise RuntimeError(
@@ -66,17 +63,7 @@ class MechArmBridge:
                 f"available DOFs: {actual_names}"
             )
 
-        description_path = self.project_root / "simulation/isaac/lula_robot_description.yaml"
-        urdf_path = (
-            self.project_root
-            / "simulation/urdf/mycobot_description/urdf/mecharm_270_pi/mecharm_270_pi_adaptive_gripper.urdf"
-        )
-        self.lula_solver = LulaKinematicsSolver(str(description_path), str(urdf_path))
-        self.ik_solver = ArticulationKinematicsSolver(
-            self.robot,
-            self.lula_solver,
-            "gripper_base",
-        )
+        print("Using calibrated joint-space pick-and-place waypoints", flush=True)
 
         enable_extension("isaacsim.ros2.bridge")
         import rclpy
@@ -88,6 +75,7 @@ class MechArmBridge:
         self.rclpy = rclpy
         if not rclpy.ok():
             rclpy.init()
+        print("Isaac ROS 2 client initialized", flush=True)
         self.node = Node("isaac_mecharm_bridge")
         self.JointState = JointState
         self.String = String
@@ -103,7 +91,7 @@ class MechArmBridge:
         self.pending_started = 0.0
         self.joint_tolerance = 0.02
         self.command_timeout = 8.0
-        self.attach_distance = 0.035
+        self.attach_distance = 0.12
 
     def _publish_result(self, success: bool, error_code: str, message: str) -> None:
         payload = json.dumps(
@@ -134,40 +122,27 @@ class MechArmBridge:
         if self.pending_positions is not None:
             self._publish_result(False, "MOTION_FAILED", "another command is still active")
             return
-        position = np.asarray(
-            [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z],
-            dtype=float,
-        )
-        quaternion_wxyz = np.asarray(
-            [
-                msg.pose.orientation.w,
-                msg.pose.orientation.x,
-                msg.pose.orientation.y,
-                msg.pose.orientation.z,
-            ],
-            dtype=float,
-        )
-        action, success = self.ik_solver.compute_inverse_kinematics(
-            target_position=position,
-            target_orientation=quaternion_wxyz,
-        )
-        if not success or action.joint_positions is None:
-            self._publish_result(False, "NO_IK", "Lula could not solve the requested pose")
+        x = float(msg.pose.position.x)
+        y = float(msg.pose.position.y)
+        z = float(msg.pose.position.z)
+        if abs(x - 0.18) > 0.03 or abs(abs(y) - 0.08) > 0.03:
+            self._publish_result(False, "NO_IK", "pose is outside the calibrated workspace")
             return
-        indices = action.joint_indices
-        if indices is None:
-            indices = np.arange(len(action.joint_positions), dtype=np.int32)
-        self._start_motion(indices, action.joint_positions, "arm")
+        location = "pick" if y >= 0.0 else "place"
+        height = "safe" if z >= 0.15 else "grasp"
+        positions = np.deg2rad(CALIBRATED_WAYPOINTS_DEG[(location, height)])
+        indices = [self.robot.get_dof_index(name) for name in ARM_JOINTS]
+        self._start_motion(indices, positions, "arm")
 
     def _on_gripper(self, msg) -> None:
         if self.pending_positions is not None:
             self._publish_result(False, "GRIPPER_FAILED", "another command is still active")
             return
         opening = max(0.0, min(1.0, float(msg.data)))
-        lower, upper = -0.74, 0.15
+        lower, upper = -0.75, 0.15
         target = lower + opening * (upper - lower)
-        indices = [self.robot.get_dof_index(name) for name, _ in GRIPPER_MIMIC_JOINTS]
-        positions = [target * multiplier for _, multiplier in GRIPPER_MIMIC_JOINTS]
+        indices = [self.robot.get_dof_index(GRIPPER_JOINT)]
+        positions = [target]
         if opening >= 0.9:
             self._detach_object()
             kind = "gripper_open"

@@ -25,6 +25,13 @@ ARGS = parse_args()
 PROJECT_ROOT = Path(ARGS.project_root).resolve()
 SCENE_PATH = PROJECT_ROOT / "simulation/scenes/mecharm_pick_place.usd"
 
+# Python 3.11 does not use PATH for dependent DLL lookup on Windows. Keep the
+# Isaac ROS 2 runtime directory registered for the lifetime of the process.
+ISAAC_SIM_ROOT = Path(os.environ.get("ISAAC_SIM_ROOT", r"E:\AIRobotic\isaac-sim"))
+ROS2_DLL_HANDLE = os.add_dll_directory(
+    str(ISAAC_SIM_ROOT / "exts/isaacsim.ros2.bridge/humble/lib")
+)
+
 simulation_app = SimulationApp({"headless": ARGS.headless})
 
 from isaacsim.core.utils.extensions import enable_extension  # noqa: E402
@@ -42,6 +49,8 @@ def build_scene() -> None:
     """Import the official URDF and create the repeatable experiment fixtures."""
     import numpy as np
     import omni.kit.commands
+    import omni.usd
+    from pxr import PhysxSchema, Sdf, UsdPhysics
 
     from isaacsim.core.api import World
     from isaacsim.core.api.objects import DynamicCuboid, FixedCuboid
@@ -59,9 +68,12 @@ def build_scene() -> None:
     import_config.fix_base = True
     import_config.make_default_prim = False
     import_config.create_physics_scene = True
-    # Isaac Sim 5.1 rejects several valid mimic limits in this vendor URDF.
-    # Import all gripper joints as DOFs; the bridge applies the mimic mapping.
-    import_config.parse_mimic = False
+    # The checked-in Isaac-specific URDF uses mutually compatible limits for
+    # the complete adaptive-gripper mimic chain.
+    import_config.parse_mimic = True
+    import_config.set_self_collision(False)
+    import_config.set_default_drive_strength(1e3)
+    import_config.set_default_position_drive_damping(1e2)
     import_config.set_collision_from_visuals(True)
     # The 5.1 URDF importer cannot parse a source path containing Chinese
     # characters. Stage the same checked-in assets under a temporary ASCII path.
@@ -84,6 +96,34 @@ def build_scene() -> None:
         raise RuntimeError(f"failed to import mechArm URDF: {URDF_PATH}")
     if imported_path != ROBOT_PRIM_PATH:
         move_prim(imported_path, ROBOT_PRIM_PATH)
+
+    # Isaac Sim 5.1 may clear limits from imported mimic targets even when the
+    # URDF contains finite limits. PhysX refuses to activate mimic joints
+    # without finite angular limits, so restore them before the first reset.
+    stage = omni.usd.get_context().get_stage()
+    mimic_joints = {
+        "gripper_base_to_gripper_left2": (-42.972, 8.594, 1.0),
+        "gripper_left3_to_gripper_left1": (-8.594, 42.972, -1.0),
+        "gripper_base_to_gripper_right3": (-8.594, 42.972, -1.0),
+        "gripper_base_to_gripper_right2": (-8.594, 42.972, -1.0),
+        "gripper_right3_to_gripper_right1": (-42.972, 8.594, 1.0),
+    }
+    reference_joint_path = f"{ROBOT_PRIM_PATH}/joints/gripper_controller"
+    for joint_name, (lower, upper, urdf_multiplier) in mimic_joints.items():
+        joint_path = f"{ROBOT_PRIM_PATH}/joints/{joint_name}"
+        joint = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
+        if not joint:
+            raise RuntimeError(f"missing imported gripper joint: {joint_path}")
+        joint.GetLowerLimitAttr().Set(lower)
+        joint.GetUpperLimitAttr().Set(upper)
+        mimic = PhysxSchema.PhysxMimicJointAPI.Apply(
+            joint.GetPrim(), UsdPhysics.Tokens.rotZ
+        )
+        mimic.GetReferenceJointRel().SetTargets([Sdf.Path(reference_joint_path)])
+        mimic.GetReferenceJointAxisAttr().Set(UsdPhysics.Tokens.rotZ)
+        # PhysX defines gearing with the opposite sign to URDF multiplier.
+        mimic.GetGearingAttr().Set(-urdf_multiplier)
+        mimic.GetOffsetAttr().Set(0.0)
 
     world = World(stage_units_in_meters=1.0)
     world.scene.add(
@@ -116,7 +156,8 @@ def main() -> None:
     os.environ.setdefault("ROS_DISTRO", "humble")
     os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
     enable_extension("isaacsim.ros2.bridge")
-    simulation_app.update()
+    for _ in range(30):
+        simulation_app.update()
 
     if ARGS.rebuild_scene or not SCENE_PATH.is_file():
         build_scene()
@@ -125,14 +166,21 @@ def main() -> None:
 
     if not open_stage(str(SCENE_PATH)):
         raise RuntimeError(f"failed to open Isaac scene: {SCENE_PATH}")
+    for _ in range(10):
+        simulation_app.update()
 
     from mecharm_bridge import MechArmBridge
 
     bridge = MechArmBridge(PROJECT_ROOT)
+    max_steps = 30 if ARGS.smoke_test else None
+    print(
+        "Starting Isaac bridge loop: "
+        f"headless={ARGS.headless}, smoke_test={ARGS.smoke_test}, max_steps={max_steps}"
+    )
     bridge.run(
         simulation_app,
         render=not ARGS.headless,
-        max_steps=30 if ARGS.smoke_test else None,
+        max_steps=max_steps,
     )
 
 

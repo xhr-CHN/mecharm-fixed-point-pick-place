@@ -8,10 +8,8 @@ cspace:
   - joint6_to_joint5
 root_link: base
 default_q: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-cspace_to_urdf_rules:
-  - {name: gripper_controller, rule: fixed, value: 0.15}
-  - {name: gripper_base_to_gripper_left2, rule: fixed, value: 0.0}
-  - {name: gripper_left3_to_gripper_left1, rule: fixed, value: 0.0}
-  - {name: gripper_base_to_gripper_right3, rule: fixed, value: 0.0}
-  - {name: gripper_base_to_gripper_right2, rule: fixed, value: 0.0}
-  - {name: gripper_right3_to_gripper_right1, rule: fixed, value: 0.0}
+acceleration_limits: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+jerk_limits: [1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0]
+cspace_to_urdf_rules: []
+composite_task_spaces: []
+collision_spheres: []

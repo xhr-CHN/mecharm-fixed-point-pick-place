@@ -17,6 +17,7 @@ if (-not $isaacRoot) {
 $pythonBat = Join-Path $isaacRoot 'python.bat'
 $entrypoint = Join-Path $ProjectRoot 'simulation\isaac\start_simulation.py'
 $bridgeLib = Join-Path $isaacRoot 'exts\isaacsim.ros2.bridge\humble\lib'
+$rosLogDir = Join-Path $ProjectRoot 'log\ros2'
 
 if (-not (Test-Path -LiteralPath $pythonBat -PathType Leaf)) {
     throw "Isaac Sim Python launcher not found: $pythonBat"
@@ -28,7 +29,9 @@ if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
 $env:ISAAC_SIM_ROOT = $isaacRoot
 $env:ROS_DISTRO = 'humble'
 $env:RMW_IMPLEMENTATION = 'rmw_fastrtps_cpp'
-$env:PATH = "$env:PATH;$bridgeLib"
+$env:PATH = "$bridgeLib;$env:PATH"
+$env:ROS_LOG_DIR = $rosLogDir
+New-Item -ItemType Directory -Path $rosLogDir -Force | Out-Null
 
 $arguments = @($entrypoint, '--project-root', $ProjectRoot)
 if ($Headless) {

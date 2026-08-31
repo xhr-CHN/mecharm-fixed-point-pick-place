@@ -9,9 +9,9 @@ mecharm_pick_place:
       - joint5_to_joint4
       - joint6_to_joint5
     home_joint_positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    pick_position: [0.18, 0.08, 0.05]
-    place_position: [0.18, -0.08, 0.05]
-    safe_height: 0.14
+    pick_position: [0.18, 0.08, 0.12]
+    place_position: [0.18, -0.08, 0.12]
+    safe_height: 0.18
     tool_orientation_xyzw: [0.0, 1.0, 0.0, 0.0]
     gripper_open: 1.0
     gripper_closed: 0.0
@@ -29,5 +29,4 @@ isaac_mecharm_bridge:
     position_tolerance: 0.008
     joint_tolerance: 0.02
     publish_rate_hz: 20.0
-    attach_distance: 0.035
-
+    attach_distance: 0.12
