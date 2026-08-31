@@ -9,6 +9,8 @@
 - 固定点抓取状态机；
 - 任务状态、五次结果和关节轨迹记录；
 - Isaac Sim 5.1 启动和 ROS 2 适配脚本；
+- Isaac Sim 内置的 120 Hz 平滑定点抓取演示；
+- 自适应夹爪 Mimic 联动、有限角度和抓取连接修复；
 - 单元测试和 ROS 2 Launch 入口。
 
 ## 目录
@@ -54,6 +56,25 @@ ros2 service call /mecharm/start_task std_srvs/srv/Trigger {}
 ```
 
 仿真坐标当前是安全的初始建议值，必须在 Isaac Sim 中核对桌面高度、工具坐标系与可达性后再用于验收。
+
+## Isaac Sim 场景与内置演示
+
+首次生成或模型修改后，在 Windows PowerShell 中执行：
+
+```powershell
+& ".\scripts\start_isaac.ps1" `
+  -ProjectRoot "E:\机器人集成小组项目\实验二" `
+  -RebuildScene `
+  -BuildSceneOnly
+```
+
+随后打开 `simulation/scenes/mecharm_pick_place.usd`，在 Isaac Sim 的 Script Editor 中执行：
+
+```python
+exec(open(r"E:\机器人集成小组项目\实验二\simulation\isaac\auto_demo_in_app.py", encoding="utf-8").read())
+```
+
+演示使用固定物理周期的五次关节轨迹。目标方块初始中心为 `(0.18, 0.08, 0.025)` m，放置点位于 `(0.18, -0.08)` m 一侧。当前仍需继续校准末端姿态并完成碰撞检查，不能替代 MoveIt 2 的在线规划。
 
 ## 模型来源
 
