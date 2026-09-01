@@ -10,6 +10,7 @@
 #include <moveit/robot_trajectory/robot_trajectory.h>
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
 #include <moveit_msgs/msg/collision_object.hpp>
+#include <moveit_msgs/msg/planning_scene.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <shape_msgs/msg/solid_primitive.hpp>
 #include <std_msgs/msg/float64.hpp>
@@ -31,6 +32,7 @@ struct Parameters {
   double acceleration_scaling;
   double gripper_open;
   double gripper_closed;
+  bool disable_collision_checking;
 };
 
 geometry_msgs::msg::Pose make_tool_pose(
@@ -119,6 +121,17 @@ void add_world_objects(moveit::planning_interface::PlanningSceneInterface& scene
   scene.applyCollisionObjects({table, cube});
 }
 
+bool allow_all_robot_self_collisions(
+    moveit::planning_interface::PlanningSceneInterface& scene,
+    const moveit::core::RobotModelConstPtr& model) {
+  moveit_msgs::msg::PlanningScene update;
+  update.is_diff = true;
+  update.allowed_collision_matrix.default_entry_names = model->getLinkModelNames();
+  update.allowed_collision_matrix.default_entry_values.assign(
+      update.allowed_collision_matrix.default_entry_names.size(), true);
+  return scene.applyPlanningScene(update);
+}
+
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   auto node = rclcpp::Node::make_shared(
@@ -142,8 +155,10 @@ int main(int argc, char** argv) {
       node->get_parameter("acceleration_scaling").as_double(),
       node->get_parameter("gripper_open").as_double(),
       node->get_parameter("gripper_closed").as_double(),
+      node->get_parameter("disable_collision_checking").as_bool(),
   };
 
+  RCLCPP_INFO(node->get_logger(), "TASK_NODE_STARTING");
   moveit::planning_interface::MoveGroupInterface group(node, "arm");
   RCLCPP_INFO(node->get_logger(), "GROUP_READY");
   moveit::planning_interface::PlanningSceneInterface scene;
@@ -158,7 +173,15 @@ int main(int argc, char** argv) {
     executor.cancel(); spin_thread.join(); rclcpp::shutdown(); return 2;
   }
   RCLCPP_INFO(node->get_logger(), "STATE_READY");
-  add_world_objects(scene);
+  if (p.disable_collision_checking) {
+    if (!allow_all_robot_self_collisions(scene, group.getRobotModel())) {
+      RCLCPP_ERROR(node->get_logger(), "COLLISION_OVERRIDE_FAILED");
+      executor.cancel(); spin_thread.join(); rclcpp::shutdown(); return 9;
+    }
+    RCLCPP_WARN(node->get_logger(), "COLLISION_CHECKING_DISABLED");
+  } else {
+    add_world_objects(scene);
+  }
   std::this_thread::sleep_for(500ms);
   command_gripper(gripper, p.gripper_open);
   RCLCPP_INFO(node->get_logger(), "SCENE_READY");
@@ -180,7 +203,9 @@ int main(int argc, char** argv) {
     executor.cancel(); spin_thread.join(); rclcpp::shutdown(); return 4;
   }
   command_gripper(gripper, p.gripper_closed);
-  group.attachObject("target_object", "gripper_base");
+  if (!p.disable_collision_checking) {
+    group.attachObject("target_object", "gripper_base");
+  }
 
   if (!execute_cartesian(group, {pick_high}, p.eef_step, p.jump_threshold,
                          p.min_fraction, p.velocity_scaling, p.acceleration_scaling)) {
@@ -197,8 +222,10 @@ int main(int argc, char** argv) {
     executor.cancel(); spin_thread.join(); rclcpp::shutdown(); return 6;
   }
   command_gripper(gripper, p.gripper_open);
-  group.detachObject("target_object");
-  scene.removeCollisionObjects({"target_object"});
+  if (!p.disable_collision_checking) {
+    group.detachObject("target_object");
+    scene.removeCollisionObjects({"target_object"});
+  }
   if (!execute_cartesian(group, {place_high}, p.eef_step, p.jump_threshold,
                          p.min_fraction, p.velocity_scaling, p.acceleration_scaling)) {
     RCLCPP_ERROR(node->get_logger(), "RETREAT_FAILED");

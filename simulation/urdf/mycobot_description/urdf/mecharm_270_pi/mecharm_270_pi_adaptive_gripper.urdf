@@ -317,6 +317,13 @@
     <origin xyz= "0 0 0.038" rpy = "1.579 0 0"/>  
   </joint>
 
+  <link name="gripper_tcp"/>
+  <joint name="gripper_base_to_tcp" type="fixed">
+    <parent link="gripper_base"/>
+    <child link="gripper_tcp"/>
+    <origin xyz="0 0.034 0" rpy="0 0 0"/>
+  </joint>
+
  <joint name="gripper_controller" type="revolute">
     <axis xyz="0 0 1"/>
     <limit effort="20.0" lower="-0.75" upper="0.15" velocity="2.0"/>

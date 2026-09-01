@@ -12,6 +12,7 @@ setup(
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/launch", glob("launch/*.launch.py")),
+        ("share/" + package_name + "/config", glob("config/*.yaml")),
     ],
     install_requires=["setuptools", "PyYAML"],
     tests_require=["pytest"],
@@ -25,6 +26,10 @@ setup(
             "pick_place_task_node = mecharm_pick_place.task_node:main",
             "pick_place_recorder_node = mecharm_pick_place.recorder_node:main",
             "isaac_trajectory_controller = mecharm_pick_place.trajectory_controller_node:main",
+            "isaac_tcp_bridge = mecharm_pick_place.tcp_bridge_node:main",
+            "direct_motion_probe = mecharm_pick_place.direct_motion_probe:main",
+            "direct_pick_place_demo = mecharm_pick_place.direct_pick_place_demo:main",
+            "cartesian_direct_pick_place = mecharm_pick_place.cartesian_direct_pick_place:main",
         ],
     },
 )

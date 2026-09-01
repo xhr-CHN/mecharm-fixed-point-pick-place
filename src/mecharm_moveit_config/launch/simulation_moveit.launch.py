@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -42,20 +42,32 @@ def generate_launch_description():
         ),
         Node(
             package="mecharm_pick_place",
+            executable="isaac_tcp_bridge",
+            name="isaac_tcp_bridge",
+            output="screen",
+            parameters=[[project_root, "/config/simulation.yaml"]],
+        ),
+        Node(
+            package="mecharm_pick_place",
             executable="isaac_trajectory_controller",
             name="isaac_trajectory_controller",
             output="screen",
             parameters=[[project_root, "/config/simulation.yaml"]],
         ),
-        Node(
-            package="mecharm_moveit_demo",
-            executable="fixed_pick_place_moveit",
-            name="fixed_pick_place",
-            output="screen",
-            condition=IfCondition(run_task),
-            parameters=[
-                moveit_config.to_dict(),
-                str(Path(task_share) / "config/fixed_pick_place.yaml"),
+        TimerAction(
+            period=12.0,
+            actions=[
+                Node(
+                    package="mecharm_moveit_demo",
+                    executable="fixed_pick_place_moveit",
+                    name="fixed_pick_place",
+                    output="screen",
+                    condition=IfCondition(run_task),
+                    parameters=[
+                        moveit_config.to_dict(),
+                        str(Path(task_share) / "config/fixed_pick_place.yaml"),
+                    ],
+                ),
             ],
         ),
     ])

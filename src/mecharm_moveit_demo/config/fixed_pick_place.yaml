@@ -14,3 +14,4 @@ fixed_pick_place:
     gripper_closed: 0.0
     velocity_scaling: 0.20
     acceleration_scaling: 0.20
+    disable_collision_checking: true
