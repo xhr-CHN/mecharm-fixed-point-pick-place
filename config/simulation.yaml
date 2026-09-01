@@ -29,7 +29,7 @@ isaac_mecharm_bridge:
     position_tolerance: 0.008
     joint_tolerance: 0.02
     publish_rate_hz: 20.0
-    attach_distance: 0.12
+    attach_distance: 0.06
 
 isaac_trajectory_controller:
   ros__parameters:
@@ -39,3 +39,9 @@ isaac_trajectory_controller:
     goal_time_tolerance_sec: 1.0
     gripper_open_position: 0.15
     gripper_closed_position: -0.75
+
+isaac_tcp_bridge:
+  ros__parameters:
+    host: 127.0.0.1
+    port: 8765
+    publish_rate_hz: 120.0

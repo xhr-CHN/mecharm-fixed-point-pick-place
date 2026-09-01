@@ -32,6 +32,7 @@ def create_ros2_graph(robot_prim_path: str) -> str:
                 ("SubscribeJointState.outputs:effortCommand", "ArticulationController.inputs:effortCommand"),
             ],
             og.Controller.Keys.SET_VALUES: [
+                ("Context.inputs:useDomainIDEnvVar", True),
                 ("PublishJointState.inputs:topicName", "/joint_states"),
                 ("SubscribeJointState.inputs:topicName", "/mecharm/joint_target"),
                 ("PublishJointState.inputs:targetPrim", [usdrt.Sdf.Path(robot_prim_path)]),

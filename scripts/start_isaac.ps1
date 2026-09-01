@@ -28,9 +28,14 @@ if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
 
 $env:ISAAC_SIM_ROOT = $isaacRoot
 $env:ROS_DISTRO = 'humble'
-$env:ROS_DOMAIN_ID = '0'
-$env:ROS_LOCALHOST_ONLY = '0'
-$env:RMW_IMPLEMENTATION = 'rmw_fastrtps_cpp'
+$env:MECHARM_TRANSPORT = 'tcp'
+$env:MECHARM_TCP_BIND = '0.0.0.0'
+$env:MECHARM_TCP_PORT = '8765'
+$env:MECHARM_SELF_COLLISION = 'selective'
+Remove-Item Env:ROS_DISCOVERY_SERVER -ErrorAction SilentlyContinue
+Remove-Item Env:ROS_SUPER_CLIENT -ErrorAction SilentlyContinue
+Remove-Item Env:FASTRTPS_DEFAULT_PROFILES_FILE -ErrorAction SilentlyContinue
+Remove-Item Env:CYCLONEDDS_URI -ErrorAction SilentlyContinue
 $env:PATH = "$bridgeLib;$env:PATH"
 $env:ROS_LOG_DIR = $rosLogDir
 New-Item -ItemType Directory -Path $rosLogDir -Force | Out-Null
