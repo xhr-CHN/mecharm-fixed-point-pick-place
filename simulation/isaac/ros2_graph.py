@@ -50,3 +50,4 @@ def tick_ros2_graph() -> None:
         og.Controller.attribute(f"{GRAPH_PATH}/OnImpulseEvent.state:enableImpulse"),
         True,
     )
+    og.Controller.evaluate_sync(og.Controller.graph(GRAPH_PATH))

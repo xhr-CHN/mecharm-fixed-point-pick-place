@@ -28,6 +28,8 @@ if (-not (Test-Path -LiteralPath $entrypoint -PathType Leaf)) {
 
 $env:ISAAC_SIM_ROOT = $isaacRoot
 $env:ROS_DISTRO = 'humble'
+$env:ROS_DOMAIN_ID = '0'
+$env:ROS_LOCALHOST_ONLY = '0'
 $env:RMW_IMPLEMENTATION = 'rmw_fastrtps_cpp'
 $env:PATH = "$bridgeLib;$env:PATH"
 $env:ROS_LOG_DIR = $rosLogDir
