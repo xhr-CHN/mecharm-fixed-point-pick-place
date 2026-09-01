@@ -28,8 +28,14 @@ SCENE_PATH = PROJECT_ROOT / "simulation/scenes/mecharm_pick_place.usd"
 # Python 3.11 does not use PATH for dependent DLL lookup on Windows. Keep the
 # Isaac ROS 2 runtime directory registered for the lifetime of the process.
 ISAAC_SIM_ROOT = Path(os.environ.get("ISAAC_SIM_ROOT", r"E:\AIRobotic\isaac-sim"))
+ROS2_RUNTIME = ISAAC_SIM_ROOT / "exts/isaacsim.ros2.bridge/humble/lib"
+os.environ.setdefault("ROS_DISTRO", "humble")
+os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
+runtime_text = str(ROS2_RUNTIME)
+if runtime_text.lower() not in os.environ.get("PATH", "").lower():
+    os.environ["PATH"] = runtime_text + os.pathsep + os.environ.get("PATH", "")
 ROS2_DLL_HANDLE = os.add_dll_directory(
-    str(ISAAC_SIM_ROOT / "exts/isaacsim.ros2.bridge/humble/lib")
+    runtime_text
 )
 
 simulation_app = SimulationApp({"headless": ARGS.headless})
@@ -43,6 +49,7 @@ URDF_PATH = (
     / "simulation/urdf/mycobot_description/urdf/mecharm_270_pi/mecharm_270_pi_adaptive_gripper.urdf"
 )
 ROBOT_PRIM_PATH = "/World/mecharm_270_pi"
+ARTICULATION_ROOT_PATH = f"{ROBOT_PRIM_PATH}/root_joint"
 
 
 def build_scene() -> None:
@@ -153,8 +160,6 @@ def build_scene() -> None:
 
 
 def main() -> None:
-    os.environ.setdefault("ROS_DISTRO", "humble")
-    os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
     enable_extension("isaacsim.ros2.bridge")
     for _ in range(30):
         simulation_app.update()
@@ -169,19 +174,34 @@ def main() -> None:
     for _ in range(10):
         simulation_app.update()
 
-    from mecharm_bridge import MechArmBridge
+    import omni.usd
+    from isaacsim.core.api import World
+    from isaacsim.core.prims import SingleArticulation
+    from grasp_monitor import GraspMonitor
+    from ros2_graph import create_ros2_graph, tick_ros2_graph
 
-    bridge = MechArmBridge(PROJECT_ROOT)
+    world = World(stage_units_in_meters=1.0, physics_dt=1.0 / 120.0, rendering_dt=1.0 / 60.0)
+    robot = SingleArticulation(prim_path=ARTICULATION_ROOT_PATH, name="mecharm_270_pi")
+    world.scene.add(robot)
+    world.reset()
+    robot.initialize()
+    create_ros2_graph(ARTICULATION_ROOT_PATH)
+    monitor = GraspMonitor(omni.usd.get_context().get_stage(), robot)
     max_steps = 30 if ARGS.smoke_test else None
     print(
-        "Starting Isaac bridge loop: "
+        "Starting Isaac ROS 2 graph loop: "
         f"headless={ARGS.headless}, smoke_test={ARGS.smoke_test}, max_steps={max_steps}"
     )
-    bridge.run(
-        simulation_app,
-        render=not ARGS.headless,
-        max_steps=max_steps,
-    )
+    world.play()
+    steps = 0
+    while not simulation_app.is_exiting():
+        world.step(render=not ARGS.headless)
+        tick_ros2_graph()
+        monitor.update()
+        steps += 1
+        if max_steps is not None and steps >= max_steps:
+            print(f"Isaac ROS 2 graph smoke test completed: {steps} simulation steps")
+            break
 
 
 if __name__ == "__main__":

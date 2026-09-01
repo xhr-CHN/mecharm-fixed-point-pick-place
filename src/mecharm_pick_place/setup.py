@@ -24,6 +24,7 @@ setup(
         "console_scripts": [
             "pick_place_task_node = mecharm_pick_place.task_node:main",
             "pick_place_recorder_node = mecharm_pick_place.recorder_node:main",
+            "isaac_trajectory_controller = mecharm_pick_place.trajectory_controller_node:main",
         ],
     },
 )

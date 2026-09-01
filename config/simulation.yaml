@@ -30,3 +30,12 @@ isaac_mecharm_bridge:
     joint_tolerance: 0.02
     publish_rate_hz: 20.0
     attach_distance: 0.12
+
+isaac_trajectory_controller:
+  ros__parameters:
+    publish_rate_hz: 120.0
+    joint_tolerance: 0.02
+    feedback_stale_timeout_sec: 0.5
+    goal_time_tolerance_sec: 1.0
+    gripper_open_position: 0.15
+    gripper_closed_position: -0.75
