@@ -2,6 +2,10 @@
 
 ## 启动
 
+当前流程使用实验二专用 Docker 镜像和 Compose 项目，不依赖比赛镜像或容器。所有 ROS 2 与 MoveIt 节点都在 `moveit` 服务内部通信；Windows Isaac 通过 TCP 8765 关节适配层发送实测状态并接收目标，不再使用跨系统 DDS。
+
+Docker 镜像使用 `%TEMP%\mecharm-exp2-docker-build` 作为纯英文构建上下文，避免中文项目路径触发 BuildKit `x-docker-expose-session-sharedkey` 编码错误。该目录只包含 Dockerfile 和入口脚本。
+
 Windows PowerShell：
 
 ```powershell
@@ -11,28 +15,48 @@ cd "E:\机器人集成小组项目\实验二"
 .\scripts\start_moveit_sim.ps1
 ```
 
-WSL：
+首次使用时，以管理员身份运行更新后的防火墙脚本，开放 Isaac `kit.exe` 的 TCP 8765。Isaac 控制台应显示 `Isaac TCP joint bridge listening on 0.0.0.0:8765`；启动 MoveIt 后应显示 `Isaac TCP joint bridge connected`。
 
-```bash
-cd /mnt/e/机器人集成小组项目/实验二
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=0 RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_LOCALHOST_ONLY=0
-ros2 launch mecharm_moveit_config simulation_moveit.launch.py use_rviz:=true run_task:=false
+首次创建或代码修改后，在 PowerShell 构建容器工作区：
+
+```powershell
+docker compose -f ".\docker-compose.yml" exec moveit bash -lc "source /opt/ros/humble/setup.bash && colcon --log-base /opt/mecharm_ws/log build --base-paths /workspace/mecharm_exp2/simulation/urdf/mycobot_description /workspace/mecharm_exp2/src --build-base /opt/mecharm_ws/build --install-base /opt/mecharm_ws/install --symlink-install"
 ```
+
+等待 Isaac 场景加载并播放后，在 PowerShell 启动直接完整抓取：
+
+```powershell
+docker compose -f ".\docker-compose.yml" exec moveit bash -lc "source /opt/ros/humble/setup.bash && source /opt/mecharm_ws/install/setup.bash && ros2 launch mecharm_pick_place direct_pick_place.launch.py project_root:=/workspace/mecharm_exp2"
+```
+
+预期：终端出现 `DIRECT_PICK_PLACE_START`，随后依次经过抓取、抬升、放置和回零阶段，最终出现 `DIRECT_PICK_PLACE_SUCCESS`。该流程不启动 MoveIt、OMPL 或 RViz。
 
 ## 运动前检查
 
-```bash
-ros2 topic echo /joint_states --once
-ros2 action list | grep '^/mecharm_controller/follow_joint_trajectory$'
+```powershell
+docker compose exec moveit bash -lc "source /opt/ros/humble/setup.bash && ros2 topic echo /joint_states --once"
+docker compose exec moveit bash -lc "source /opt/ros/humble/setup.bash && ros2 action list | grep '^/mecharm_controller/follow_joint_trajectory$'"
 ```
 
 必须同时看到六个机械臂关节和 `gripper_controller`，并能看到上述 action。检查通过后停止 launch，再执行完整任务：
 
-```bash
-ros2 launch mecharm_moveit_config simulation_moveit.launch.py use_rviz:=true run_task:=true
+```powershell
+docker compose exec moveit bash -lc "source /opt/ros/humble/setup.bash && source /opt/mecharm_ws/install/setup.bash && cd /workspace/mecharm_exp2 && ros2 launch mecharm_moveit_config simulation_moveit.launch.py project_root:=/workspace/mecharm_exp2 use_rviz:=false run_task:=true"
 ```
+
+完整任务成功时，日志依次出现 `GROUP_READY`、`STATE_READY`、`SCENE_READY`、`HOME_START`、`HOME_DONE`，最终出现 `PICK_PLACE_SUCCESS`。若只停在 `You can start planning now!` 且没有 `GROUP_READY`，说明任务节点未被 DDS 发现；优先检查 TUN 是否关闭和三个环境变量是否已清除。
+
+`run_task:=true` 时，任务节点会延迟 12 秒启动，给 `move_group` 和控制器留出初始化时间。先出现 `You can start planning now!`、随后出现 `TASK_NODE_STARTING` 属于正常顺序。RViz 报 `/recognize_objects not available` 可以忽略，该实验未使用物体识别 action。
+
+自适应夹爪左右两侧的 `gripper_left1/left2` 和 `gripper_right1/right2` 是正常机构重叠对，已仅在 MoveIt SRDF 中禁用自碰撞检查；Isaac 的真实物理碰撞保持不变。
+
+当前“先动起来”阶段设置 `disable_collision_checking: true`：MoveIt 不加载桌面/方块碰撞体，并允许机器人内部碰撞。关节限位、速度、加速度、轨迹执行和 Isaac 真实物理仍启用。模型碰撞几何校准后将该参数改回 `false`。
+
+官方 adaptive-gripper DAE 只有铰接孔，没有独立插销网格。场景构建时会在四个外露铰点生成无碰撞金属圆柱，并验证对应四个 PhysX RevoluteJoint 的 body0/body1 连接。插销只补视觉，转动约束由 RevoluteJoint 提供，避免实体插销与连杆碰撞后卡死。
+
+Isaac 使用 `MECHARM_SELF_COLLISION=selective`：开启 articulation self-collision，但过滤机械臂相邻连杆、机械臂与夹爪官方重叠网格、以及除最终左右夹指以外的夹爪内部机构对。`gripper_left1` 与 `gripper_right1` 的碰撞保持启用，使最终夹指可以物理接触。
+
+抓取顺序固定为：初始慢速闭合夹爪，移动至物体正上方，等待后慢速打开，等待后下降，等待后慢速合拢。夹爪速度为 `0.12 rad/s`，每次开合前等待 `1.0 s`、开合后等待 `1.5 s`。物理附着距离为 `0.06 m`，避免闭合夹爪经过预抓取点时提前吸附方块。
 
 若规划失败、关节状态超过 0.5 秒未更新或最终误差超过 0.02 rad，控制器会中止任务并保持当前实测位置。
 

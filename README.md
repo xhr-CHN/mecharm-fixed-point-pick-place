@@ -29,20 +29,19 @@ report/                 实验报告
 
 ## 初次构建
 
-在 WSL 中执行：
+项目使用独立镜像 `mecharm-exp2-ros2:humble`。Dockerfile 会安装 ROS 2 Humble、MoveIt 2、Fast DDS 工具和 colcon；不依赖比赛镜像或容器。为规避 Docker BuildKit 对中文上下文路径的会话编码问题，启动脚本只把 `docker/Dockerfile` 和 `docker/entrypoint.sh` 暂存到 `%TEMP%\mecharm-exp2-docker-build` 后构建，源码仍从原实验二目录挂载。
 
-```bash
-sudo apt-get update
-sudo apt-get install -y ros-humble-moveit ros-humble-moveit-configs-utils ros-humble-control-msgs ros-humble-trajectory-msgs ros-humble-xacro
-cd /mnt/e/机器人集成小组项目/实验二
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install
-source install/setup.bash
-```
+所有 ROS 2 Humble/MoveIt 2 节点都运行在单个 `moveit` 容器中，并使用容器本机 ROS 图。Windows Isaac Sim 不再加入跨系统 DDS；它通过项目自带的 TCP 8765 关节适配层与容器交换 `/joint_states` 和 `/mecharm/joint_target`。WSL 不承载运行时 ROS 图。
 
-本项目固定使用 WSL `Ubuntu-22.04`。Windows 和 WSL 两侧均使用 `ROS_DOMAIN_ID=0`、`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`、`ROS_LOCALHOST_ONLY=0`。
+首次使用时，需要在管理员 PowerShell 中运行 `scripts/enable_ros2_firewall.ps1`，为 Isaac Sim 开放 TCP 8765。旧的 Domain 44 UDP 防火墙规则会由脚本移除。
 
 ## MoveIt 2 仿真（当前主流程）
+
+启动前先关闭代理软件的 TUN 模式。TUN 会拦截 ROS 2 使用的 UDP/DDS 发现流量，典型现象是 Isaac Sim 和 RViz 都能打开，但 RViz 的 Global Status 为 Error、机械臂不显示、任务不执行。若刚关闭 TUN，请先在 Windows PowerShell 执行一次：
+
+```powershell
+wsl --shutdown
+```
 
 先在 Windows PowerShell 执行：
 
@@ -51,17 +50,21 @@ cd "E:\机器人集成小组项目\实验二"
 .\scripts\start_moveit_sim.ps1
 ```
 
-Isaac 场景打开后，在 WSL 执行：
+脚本会构建并启动项目自己的 `moveit` 服务和 Isaac Sim，并打印工作区构建命令与完整任务命令。等待 Isaac 场景完全加载且时间轴开始运行后执行打印出的命令。首轮使用 `use_rviz:=false`，直接在 Isaac 中观察完整抓取。
 
-```bash
-cd /mnt/e/机器人集成小组项目/实验二
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export ROS_DOMAIN_ID=0 RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_LOCALHOST_ONLY=0
-ros2 launch mecharm_moveit_config simulation_moveit.launch.py use_rviz:=true run_task:=false
+容器首次创建或代码修改后构建：
+
+```powershell
+docker compose -f ".\docker-compose.yml" exec moveit bash -lc "source /opt/ros/humble/setup.bash && colcon --log-base /opt/mecharm_ws/log build --base-paths /workspace/mecharm_exp2/simulation/urdf/mycobot_description /workspace/mecharm_exp2/src --build-base /opt/mecharm_ws/build --install-base /opt/mecharm_ws/install --symlink-install"
 ```
 
-确认 `/joint_states` 和 `/mecharm_controller/follow_joint_trajectory` 后，将 `run_task` 改为 `true` 启动一次完整抓取。详细步骤见 `docs/testing.md`。
+当前推荐的直接完整抓取（不启动 MoveIt/OMPL）：
+
+```powershell
+docker compose -f ".\docker-compose.yml" exec moveit bash -lc "source /opt/ros/humble/setup.bash && source /opt/mecharm_ws/install/setup.bash && ros2 launch mecharm_pick_place direct_pick_place.launch.py project_root:=/workspace/mecharm_exp2"
+```
+
+该流程复用实验二已经验证的关节路点和平滑插值，直接在 Isaac 中完成抓取。MoveIt 碰撞模型保留为后续校准项。详细步骤见 `docs/testing.md`。
 
 模型导入与场景标定完成后，从 Windows PowerShell 运行（脚本默认使用本机已验证的 `E:\AIRobotic\isaac-sim`）：
 
