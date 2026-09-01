@@ -145,6 +145,7 @@ int main(int argc, char** argv) {
   };
 
   moveit::planning_interface::MoveGroupInterface group(node, "arm");
+  RCLCPP_INFO(node->get_logger(), "GROUP_READY");
   moveit::planning_interface::PlanningSceneInterface scene;
   auto gripper = node->create_publisher<std_msgs::msg::Float64>("/mecharm/gripper_command", 10);
   group.setEndEffectorLink("gripper_base");
@@ -156,15 +157,19 @@ int main(int argc, char** argv) {
     RCLCPP_ERROR(node->get_logger(), "NO_JOINT_STATE");
     executor.cancel(); spin_thread.join(); rclcpp::shutdown(); return 2;
   }
+  RCLCPP_INFO(node->get_logger(), "STATE_READY");
   add_world_objects(scene);
   std::this_thread::sleep_for(500ms);
   command_gripper(gripper, p.gripper_open);
+  RCLCPP_INFO(node->get_logger(), "SCENE_READY");
 
   group.setNamedTarget("home");
+  RCLCPP_INFO(node->get_logger(), "HOME_START");
   if (!static_cast<bool>(group.move())) {
     RCLCPP_ERROR(node->get_logger(), "HOME_FAILED");
     executor.cancel(); spin_thread.join(); rclcpp::shutdown(); return 3;
   }
+  RCLCPP_INFO(node->get_logger(), "HOME_DONE");
 
   const auto pick_high = make_tool_pose(p.pick, p, p.pregrasp_clearance);
   const auto pick_low = make_tool_pose(p.pick, p, p.grasp_clearance);

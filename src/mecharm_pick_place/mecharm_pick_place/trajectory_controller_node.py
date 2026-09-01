@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import time
 from threading import Lock
 
 import rclpy
@@ -122,7 +122,7 @@ class IsaacTrajectoryController(Node):
         if all(value == value for value in measured):
             self._publish_target(measured)
 
-    async def _execute(self, goal_handle):
+    def _execute(self, goal_handle):
         trajectory = self._raw_trajectory(goal_handle.request)
         start = self.get_clock().now()
         duration = trajectory.points[-1].time_from_start
@@ -165,7 +165,7 @@ class IsaacTrajectoryController(Node):
                 result.error_code = FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED
                 result.error_string = outcome
                 return result
-            await asyncio.sleep(1.0 / self.rate_hz)
+            time.sleep(1.0 / self.rate_hz)
 
         self._hold()
         goal_handle.abort()

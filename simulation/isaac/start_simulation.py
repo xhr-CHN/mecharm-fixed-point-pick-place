@@ -186,6 +186,10 @@ def main() -> None:
     world.reset()
     robot.initialize()
     create_ros2_graph(ARTICULATION_ROOT_PATH)
+    # Let the OmniGraph nodes initialize before playback so the ROS 2
+    # subscription is created, not just the publisher.
+    for _ in range(10):
+        simulation_app.update()
     monitor = GraspMonitor(omni.usd.get_context().get_stage(), robot)
     max_steps = 30 if ARGS.smoke_test else None
     print(
