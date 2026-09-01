@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.8)
+project(mecharm_moveit_demo)
+
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(moveit_msgs REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(shape_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+
+add_executable(fixed_pick_place_moveit src/fixed_pick_place_moveit.cpp)
+ament_target_dependencies(fixed_pick_place_moveit geometry_msgs moveit_msgs
+  moveit_ros_planning_interface rclcpp shape_msgs std_msgs)
+install(TARGETS fixed_pick_place_moveit DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
+ament_package()

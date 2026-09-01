@@ -1,0 +1,16 @@
+fixed_pick_place:
+  ros__parameters:
+    pick_xyz: [0.18, 0.08, 0.025]
+    place_xyz: [0.18, -0.08, 0.025]
+    pregrasp_clearance: 0.08
+    grasp_clearance: 0.015
+    retreat_distance: 0.08
+    eef_step: 0.005
+    jump_threshold: 0.0
+    cartesian_fraction_threshold: 0.95
+    tool_offset_xyz: [0.0, 0.0, 0.10]
+    tool_orientation_xyzw: [0.0, 1.0, 0.0, 0.0]
+    gripper_open: 1.0
+    gripper_closed: 0.0
+    velocity_scaling: 0.20
+    acceleration_scaling: 0.20
