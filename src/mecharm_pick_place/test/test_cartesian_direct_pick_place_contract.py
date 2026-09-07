@@ -13,10 +13,10 @@ def test_cartesian_direct_mode_uses_collision_free_ik_and_vertical_tool():
     config = yaml.safe_load(
         (ROOT / "config/direct_cartesian_pick_place.yaml").read_text(encoding="utf-8")
     )["cartesian_direct_pick_place"]["ros__parameters"]
-    assert config["pick_xyz"] == [0.18, 0.08, 0.025]
+    assert config["pick_xyz"] == [0.18, 0.09, 0.025]
     assert config["place_xyz"] == [0.18, -0.08, 0.025]
-    assert config["position_tolerance"] == 0.005
-    assert config["vertical_axis_dot_min"] == 0.98
+    assert config["position_tolerance"] == 0.008
+    assert config["vertical_axis_dot_min"] == 0.975
     assert config["pregrasp_clearance"] == 0.10
     assert config["pick_close_clearance"] == 0.04
     assert "grasp_clearance" not in config
@@ -42,4 +42,5 @@ def test_gripper_closes_before_approach_then_opens_descends_and_closes():
     assert "GRIPPER_WAIT_BEFORE" in SOURCE
     assert "GRIPPER_WAIT_AFTER" in SOURCE
     assert "GRIPPER_OPEN_ABOVE_OBJECT" not in SOURCE
-    assert 'node.solve("PLACE_GRASP", place, pick_close, command)' in SOURCE
+    assert 'node.solve("PLACE_GRASP", place, pick_close, command, grasp_tool_x)' in SOURCE
+    assert 'grasp_yaw_offset_deg' in SOURCE

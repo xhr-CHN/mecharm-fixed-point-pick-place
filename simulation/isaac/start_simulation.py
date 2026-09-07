@@ -235,8 +235,8 @@ def build_scene() -> None:
             "MECHARM_SELF_COLLISION must be off, selective, or all"
         )
     import_config.set_self_collision(self_collision_mode != "off")
-    import_config.set_default_drive_strength(1e3)
-    import_config.set_default_position_drive_damping(1e2)
+    import_config.set_default_drive_strength(10000)
+    import_config.set_default_position_drive_damping(6000)
     import_config.set_collision_from_visuals(True)
     # The 5.1 URDF importer cannot parse a source path containing Chinese
     # characters. Stage the same checked-in assets under a temporary ASCII path.

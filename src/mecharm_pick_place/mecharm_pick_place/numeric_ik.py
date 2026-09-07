@@ -106,7 +106,14 @@ class UrdfNumericIK:
                 )
         return matrix
 
-    def solve(self, target_xyz, seed, position_tolerance=0.005, axis_dot_min=0.98):
+    def solve(
+        self,
+        target_xyz,
+        seed,
+        position_tolerance=0.005,
+        axis_dot_min=0.98,
+        tool_x_axis=None,
+    ):
         target = np.asarray(target_xyz, dtype=float)
         seed = np.clip(np.asarray(seed, dtype=float), self.lower, self.upper)
         home = np.asarray((0.0, 0.0, 0.0, math.radians(-47.0), 0.0, 0.0))
@@ -118,14 +125,36 @@ class UrdfNumericIK:
             np.clip((-0.5, 0.5, -1.0, -1.0, 0.0, 0.0), self.lower, self.upper),
         )
         down = np.asarray((0.0, 0.0, -1.0))
+        desired_tool_x = None
+        if tool_x_axis is not None:
+            desired_tool_x = np.asarray(tool_x_axis, dtype=float)
+            desired_tool_x[2] = 0.0
+            norm = np.linalg.norm(desired_tool_x)
+            if norm < 1e-9:
+                raise ValueError("tool_x_axis must have a non-zero horizontal projection")
+            desired_tool_x /= norm
         best = None
         for initial in candidates:
             def residual(values):
                 pose = self.forward(values)
                 position_error = pose[:3, 3] - target
                 approach_error = pose[:3, 1] - down
+                yaw_error = (
+                    pose[:3, 0] - desired_tool_x
+                    if desired_tool_x is not None
+                    else np.zeros(3)
+                )
                 regularization = 0.02 * (values - seed)
-                return np.concatenate((20.0 * position_error, approach_error, regularization))
+                # Keep vertical alignment dominant; the yaw target resolves
+                # the free wrist rotation without sacrificing reachability.
+                return np.concatenate(
+                    (
+                        20.0 * position_error,
+                        approach_error,
+                        0.35 * yaw_error,
+                        regularization,
+                    )
+                )
 
             result = least_squares(
                 residual,
