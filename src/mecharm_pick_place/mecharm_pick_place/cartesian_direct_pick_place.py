@@ -16,8 +16,16 @@ class CartesianDirectPickPlace(DirectMotionProbe):
         super().__init__(node_name="cartesian_direct_pick_place")
         self.declare_parameter("pick_xyz", [0.18, 0.08, 0.025])
         self.declare_parameter("place_xyz", [0.18, -0.08, 0.025])
-        self.declare_parameter("pregrasp_clearance", 0.08)
-        self.declare_parameter("grasp_clearance", 0.0)
+        # Keep the open gripper safely above the object during approach.
+        # z=0.145 (clearance 0.12) exceeds what the vertical IK can solve
+        # (best axis_dot ~0.971), so 0.10 -> pre-grasp z=0.125 is used.
+        self.declare_parameter("pregrasp_clearance", 0.10)
+        # The claws stop above the cube top (z=0.05) and close at this height
+        # so the open gripper never descends into the object before 合爪.
+        # The place side opens at the same height: the held cube is then
+        # already back at table level, so releasing lower would push it into
+        # the table.
+        self.declare_parameter("pick_close_clearance", 0.04)
         self.declare_parameter("urdf_path", "")
         self.declare_parameter("position_tolerance", 0.005)
         self.declare_parameter("vertical_axis_dot_min", 0.98)
@@ -77,20 +85,19 @@ def main(args=None):
         pick = node.get_parameter("pick_xyz").value
         place = node.get_parameter("place_xyz").value
         pregrasp = float(node.get_parameter("pregrasp_clearance").value)
-        grasp = float(node.get_parameter("grasp_clearance").value)
+        pick_close = float(node.get_parameter("pick_close_clearance").value)
         open_position = float(node.get_parameter("gripper_open").value)
         closed_position = float(node.get_parameter("gripper_closed").value)
         command = node.positions
         node.get_logger().info("CARTESIAN_DIRECT_PICK_PLACE_START")
-        command = node.move_gripper("INITIAL_GRIPPER_CLOSE", command, closed_position)
+        command = node.move_gripper("INITIAL_GRIPPER_OPEN", command, open_position)
         command = _move_arm(node, "HOME", command, HOME)
         command = _move(node, "PICK_PREGRASP", command, node.solve("PICK_PREGRASP", pick, pregrasp, command))
-        command = node.move_gripper("GRIPPER_OPEN_ABOVE_OBJECT", command, open_position)
-        command = _move(node, "PICK_GRASP", command, node.solve("PICK_GRASP", pick, grasp, command))
+        command = _move(node, "PICK_GRASP", command, node.solve("PICK_GRASP", pick, pick_close, command))
         command = node.move_gripper("GRIPPER_CLOSE_ON_OBJECT", command, closed_position)
         command = _move(node, "LIFT", command, node.solve("LIFT", pick, pregrasp, command))
         command = _move(node, "PLACE_PREGRASP", command, node.solve("PLACE_PREGRASP", place, pregrasp, command))
-        command = _move(node, "PLACE_GRASP", command, node.solve("PLACE_GRASP", place, grasp, command))
+        command = _move(node, "PLACE_GRASP", command, node.solve("PLACE_GRASP", place, pick_close, command))
         command = node.move_gripper("GRIPPER_OPEN_TO_RELEASE", command, open_position)
         command = _move(node, "RETREAT", command, node.solve("RETREAT", place, pregrasp, command))
         _move_arm(node, "RETURN_HOME", command, HOME)

@@ -2,8 +2,8 @@ cartesian_direct_pick_place:
   ros__parameters:
     pick_xyz: [0.18, 0.08, 0.025]
     place_xyz: [0.18, -0.08, 0.025]
-    pregrasp_clearance: 0.08
-    grasp_clearance: 0.0
+    pregrasp_clearance: 0.10
+    pick_close_clearance: 0.04
     urdf_path: /workspace/mecharm_exp2/simulation/urdf/mycobot_description/urdf/mecharm_270_pi/mecharm_270_pi_adaptive_gripper.urdf
     position_tolerance: 0.005
     vertical_axis_dot_min: 0.98

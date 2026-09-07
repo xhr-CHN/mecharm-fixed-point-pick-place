@@ -17,6 +17,9 @@ def test_cartesian_direct_mode_uses_collision_free_ik_and_vertical_tool():
     assert config["place_xyz"] == [0.18, -0.08, 0.025]
     assert config["position_tolerance"] == 0.005
     assert config["vertical_axis_dot_min"] == 0.98
+    assert config["pregrasp_clearance"] == 0.10
+    assert config["pick_close_clearance"] == 0.04
+    assert "grasp_clearance" not in config
     assert "UrdfNumericIK" in SOURCE
     assert config["gripper_open"] == 0.15
     assert config["gripper_closed"] == -0.75
@@ -29,9 +32,8 @@ def test_cartesian_direct_mode_uses_collision_free_ik_and_vertical_tool():
 
 def test_gripper_closes_before_approach_then_opens_descends_and_closes():
     stages = (
-        "INITIAL_GRIPPER_CLOSE",
+        "INITIAL_GRIPPER_OPEN",
         "PICK_PREGRASP",
-        "GRIPPER_OPEN_ABOVE_OBJECT",
         "PICK_GRASP",
         "GRIPPER_CLOSE_ON_OBJECT",
     )
@@ -39,3 +41,5 @@ def test_gripper_closes_before_approach_then_opens_descends_and_closes():
     assert offsets == sorted(offsets)
     assert "GRIPPER_WAIT_BEFORE" in SOURCE
     assert "GRIPPER_WAIT_AFTER" in SOURCE
+    assert "GRIPPER_OPEN_ABOVE_OBJECT" not in SOURCE
+    assert 'node.solve("PLACE_GRASP", place, pick_close, command)' in SOURCE
