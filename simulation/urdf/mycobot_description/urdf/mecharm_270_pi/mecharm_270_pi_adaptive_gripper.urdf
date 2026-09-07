@@ -350,7 +350,6 @@
     <parent link="gripper_left3"/>
     <child link="gripper_left1"/>
     <origin xyz= "-0.027 0.016 0" rpy = "0 0 0"/> 
-    <mimic joint="gripper_controller" multiplier="-1.0" offset="0" />
   </joint>
 
   <joint name="gripper_base_to_gripper_right3" type="revolute">
@@ -380,7 +379,6 @@
     <parent link="gripper_right3"/>
     <child link="gripper_right1"/>
     <origin xyz= "0.027 0.016 0" rpy = "0 0 0"/> 
-    <mimic joint="gripper_controller" multiplier="1.0" offset="0" />
   </joint>
 
 </robot>

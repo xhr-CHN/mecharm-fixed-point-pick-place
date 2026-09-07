@@ -54,9 +54,19 @@ docker compose exec moveit bash -lc "source /opt/ros/humble/setup.bash && source
 
 官方 adaptive-gripper DAE 只有铰接孔，没有独立插销网格。场景构建时会在四个外露铰点生成无碰撞金属圆柱，并验证对应四个 PhysX RevoluteJoint 的 body0/body1 连接。插销只补视觉，转动约束由 RevoluteJoint 提供，避免实体插销与连杆碰撞后卡死。
 
+官方 URDF 因树结构限制省略了 `gripper_left2↔gripper_left1` 和 `gripper_right2↔gripper_right1` 两个闭环销轴。Isaac 场景构建会将外侧夹指关节改为被动关节，并在 DAE 实测孔位处创建左右两个 PhysX loop RevoluteJoint，使内侧连杆通过闭环真实带动外侧夹指。
+
+构建时会显式清除 URDF 导入器留在外侧被动关节上的默认驱动属性（`drive:angular:physics:*`）。这类属性不是以 DriveAPI 形式写入，`RemoveAPI` 不会删除；若残留，外侧夹指会被弹簧拉回零位并与闭环约束顶牛，表现为一侧夹指松软、无法出力。
+
+PhysX 5.1 对“同一个 reference joint 的多个 mimic follower”支持不可靠：`left2/right2/right3` 若都 mimic `gripper_controller`，右侧整侧会被静默忽略、收不到开合指令。因此场景不再导入 URDF mimic，三根内连杆（`left2/right2/right3`）都改为显式 angular drive；TCP 桥收到 `gripper_controller` 指令时在软件层按 `left2=+master`、`right2=right3=-master` 同步镜像，外侧夹指仍由闭环真实带动。
+
+两个 loop RevoluteJoint 设置 `excludeFromArticulation=true`，作为树形 articulation 之外的闭环约束参与 PhysX 求解；articulation 的位置和速度迭代数均设为 64，减少受力时销孔分离和外侧夹指松动。
+
+靠近夹指端的两个可见插销挂在 `gripper_left1/right1` 外侧夹指上，位置使用 loop joint 的外侧局部锚点；这样不会被内侧 `left2/right2` 连杆遮挡，并与夹指一起运动。
+
 Isaac 使用 `MECHARM_SELF_COLLISION=selective`：开启 articulation self-collision，但过滤机械臂相邻连杆、机械臂与夹爪官方重叠网格、以及除最终左右夹指以外的夹爪内部机构对。`gripper_left1` 与 `gripper_right1` 的碰撞保持启用，使最终夹指可以物理接触。
 
-抓取顺序固定为：初始慢速闭合夹爪，移动至物体正上方，等待后慢速打开，等待后下降，等待后慢速合拢。夹爪速度为 `0.12 rad/s`，每次开合前等待 `1.0 s`、开合后等待 `1.5 s`。物理附着距离为 `0.06 m`，避免闭合夹爪经过预抓取点时提前吸附方块。
+抓取顺序固定为：初始慢速打开夹爪，回到初始位，移动到物体正上方预抓取高度（`z=0.125 m`），下降到合爪高度（`z=0.065 m`，高于物体顶面 `0.050 m`），在不再继续下降的情况下慢速合拢，随后抬升。放置侧同样下降到 `z=0.065 m`（与合爪高度一致，此时被夹物体已回到桌面高度）后再打开释放。夹爪速度为 `0.12 rad/s`，每次开合前等待 `1.0 s`、开合后等待 `1.5 s`。物理附着距离为 `0.08 m`，且只有在夹爪合拢后才会吸附。
 
 若规划失败、关节状态超过 0.5 秒未更新或最终误差超过 0.02 rad，控制器会中止任务并保持当前实测位置。
 

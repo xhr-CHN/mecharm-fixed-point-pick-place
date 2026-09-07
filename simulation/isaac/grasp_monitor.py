@@ -14,7 +14,7 @@ class GraspMonitor:
         gripper_joint_name="gripper_controller",
         closed_threshold=-0.68,
         open_threshold=0.08,
-        attach_distance=0.06,
+        attach_distance=0.08,
         joint_path="/World/mecharm_grasp_fixed_joint",
     ):
         self.stage = stage

@@ -19,6 +19,16 @@ JOINT_NAMES = (
     "joint5_to_joint4",
     "joint6_to_joint5",
     "gripper_controller",
+    # The articulation tree exposes the mimic followers and the passive outer
+    # jaws as DOFs as well. Publishing them lets a manual open/close test
+    # verify both four-bar sides from ROS instead of creating a second World
+    # inside Isaac (which conflicts with the running control loop and crashes
+    # the app).
+    "gripper_base_to_gripper_left2",
+    "gripper_left3_to_gripper_left1",
+    "gripper_base_to_gripper_right3",
+    "gripper_base_to_gripper_right2",
+    "gripper_right3_to_gripper_right1",
 )
 
 
@@ -44,6 +54,35 @@ class IsaacTcpJointBridge:
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
         print(f"Isaac TCP joint bridge listening on {bind_host}:{port}", flush=True)
+
+    @staticmethod
+    def _mirrored_gripper_targets(names, positions):
+        """Expand a gripper_controller command to all driven inner links.
+
+        PhysX mimic followers of the same reference joint are unreliable in
+        this scene (the right side is silently ignored), so the scene drives
+        every inner gripper link explicitly.  The ROS side only commands
+        gripper_controller; this bridge mirrors it: left2 follows with +1 and
+        right2/right3 follow with -1.
+        """
+        if "gripper_controller" not in names:
+            return names, positions
+        master = float(positions[names.index("gripper_controller")])
+        targets = {
+            "gripper_controller": master,
+            "gripper_base_to_gripper_left2": master,
+            "gripper_base_to_gripper_right3": -master,
+            "gripper_base_to_gripper_right2": -master,
+        }
+        expanded_names = list(names)
+        expanded_positions = list(positions)
+        for joint_name, target in targets.items():
+            if joint_name in expanded_names:
+                expanded_positions[expanded_names.index(joint_name)] = target
+            else:
+                expanded_names.append(joint_name)
+                expanded_positions.append(target)
+        return tuple(expanded_names), tuple(expanded_positions)
 
     def _serve(self):
         while not self._stop.is_set():
@@ -115,6 +154,7 @@ class IsaacTcpJointBridge:
         if command is None:
             return
         names, positions = command
+        names, positions = self._mirrored_gripper_targets(names, positions)
         indices = np.asarray(
             [self._articulation.get_dof_index(name) for name in names], dtype=np.int32
         )

@@ -4,7 +4,8 @@ param(
     [switch]$Headless,
     [switch]$BuildSceneOnly,
     [switch]$RebuildScene,
-    [switch]$SmokeTest
+    [switch]$SmokeTest,
+    [switch]$GripperSweep
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,6 +17,7 @@ if (-not $isaacRoot) {
 
 $pythonBat = Join-Path $isaacRoot 'python.bat'
 $entrypoint = Join-Path $ProjectRoot 'simulation\isaac\start_simulation.py'
+$scenePath = Join-Path $ProjectRoot 'simulation\scenes\mecharm_pick_place.usd'
 $bridgeLib = Join-Path $isaacRoot 'exts\isaacsim.ros2.bridge\humble\lib'
 $rosLogDir = Join-Path $ProjectRoot 'log\ros2'
 
@@ -53,6 +55,36 @@ if ($RebuildScene) {
 if ($SmokeTest) {
     $arguments += '--smoke-test'
 }
+if ($GripperSweep) {
+    $arguments += '--gripper-sweep'
+}
+
+Write-Host 'Launching Isaac Sim experiment entry point...'
+Write-Host "  Project root: $ProjectRoot"
+Write-Host "  Scene path:   $scenePath"
+Write-Host "  Rebuild:      $($RebuildScene.IsPresent)"
+Write-Host "  Build only:   $($BuildSceneOnly.IsPresent)"
+Write-Host "  Arguments:    $($arguments -join ' ')"
+
+$sceneWriteBefore = if (Test-Path -LiteralPath $scenePath -PathType Leaf) {
+    (Get-Item -LiteralPath $scenePath).LastWriteTimeUtc
+} else {
+    [DateTime]::MinValue
+}
 
 & $pythonBat @arguments
-exit $LASTEXITCODE
+$isaacExitCode = $LASTEXITCODE
+if ($isaacExitCode -ne 0) {
+    throw "Isaac Sim experiment exited with code $isaacExitCode"
+}
+if ($RebuildScene) {
+    if (-not (Test-Path -LiteralPath $scenePath -PathType Leaf)) {
+        throw "Isaac reported success but the scene does not exist: $scenePath"
+    }
+    $sceneItem = Get-Item -LiteralPath $scenePath
+    if ($sceneItem.LastWriteTimeUtc -le $sceneWriteBefore) {
+        throw "Isaac reported success but the USD timestamp did not change: $scenePath"
+    }
+    Write-Host 'USD rebuild verified:'
+    $sceneItem | Select-Object FullName, LastWriteTime, Length | Format-List
+}

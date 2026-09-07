@@ -27,4 +27,4 @@ def test_tcp_bridge_preserves_existing_ros_topic_contract():
 
 def test_grasp_monitor_does_not_attach_from_pregrasp_height():
     monitor = (ROOT / "simulation/isaac/grasp_monitor.py").read_text(encoding="utf-8")
-    assert "attach_distance=0.06" in monitor
+    assert "attach_distance=0.08" in monitor

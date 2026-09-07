@@ -18,12 +18,149 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build-scene-only", action="store_true")
     parser.add_argument("--rebuild-scene", action="store_true")
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--gripper-sweep", action="store_true")
     return parser.parse_args()
 
 
 ARGS = parse_args()
 PROJECT_ROOT = Path(ARGS.project_root).resolve()
 SCENE_PATH = PROJECT_ROOT / "simulation/scenes/mecharm_pick_place.usd"
+
+GRIPPER_SWEEP_JOINTS = (
+    "gripper_controller",
+    "gripper_base_to_gripper_left2",
+    "gripper_left3_to_gripper_left1",
+    "gripper_base_to_gripper_right3",
+    "gripper_base_to_gripper_right2",
+    "gripper_right3_to_gripper_right1",
+)
+
+
+def run_gripper_sweep(world, robot, headless: bool) -> None:
+    """Sweep the master gripper joint and report both four-bar sides.
+
+    Uses the already-created World/articulation from main(), so it cannot
+    conflict with a second simulation context.  The arm is held at its reset
+    pose; only gripper_controller is commanded.
+    """
+    import numpy as np
+    from isaacsim.core.utils.types import ArticulationAction
+
+    arm_names = (
+        "joint1_to_base",
+        "joint2_to_joint1",
+        "joint3_to_joint2",
+        "joint4_to_joint3",
+        "joint5_to_joint4",
+        "joint6_to_joint5",
+    )
+    arm_indices = np.asarray(
+        [robot.get_dof_index(name) for name in arm_names], dtype=np.int32
+    )
+    monitor_indices = {
+        name: robot.get_dof_index(name) for name in GRIPPER_SWEEP_JOINTS
+    }
+    if np.any(arm_indices < 0) or any(
+        index is None or index < 0 for index in monitor_indices.values()
+    ):
+        raise RuntimeError("gripper sweep could not resolve every monitored DOF")
+
+    controller = robot.get_articulation_controller()
+    kps, kds = controller.get_gains()
+    kps[arm_indices] = 1000.0
+    kds[arm_indices] = 100.0
+    controller.set_gains(kps=kps, kds=kds)
+
+    all_positions = robot.get_joint_positions()
+    if all_positions is None:
+        raise RuntimeError("gripper sweep could not read initial joint positions")
+    arm_start = np.asarray(
+        [float(all_positions[index]) for index in arm_indices], dtype=float
+    )
+    master_index = int(monitor_indices["gripper_controller"])
+    master_start = float(all_positions[master_index])
+    gripper_drive_joints = (
+        "gripper_controller",
+        "gripper_base_to_gripper_left2",
+        "gripper_base_to_gripper_right3",
+        "gripper_base_to_gripper_right2",
+    )
+    gripper_indices = np.asarray(
+        [monitor_indices[name] for name in gripper_drive_joints],
+        dtype=np.int32,
+    )
+
+    world.play()
+    sweep_hz = 120.0
+    segments = (
+        ("OPEN", 0.15, 5.0),
+        ("CLOSE", -0.75, 7.0),
+        ("OPEN", 0.15, 5.0),
+    )
+    print("Gripper sweep starting", flush=True)
+    print(
+        "step  master(deg) L2(deg) R2(deg) R3(deg) L_outer(deg) R_outer(deg)",
+        flush=True,
+    )
+    global_step = 0
+    for label, target, duration_s in segments:
+        start = master_start if label == "OPEN" and global_step == 0 else None
+        if start is None:
+            start = float(
+                all_positions[master_index]
+                if global_step == 0
+                else robot.get_joint_positions()[master_index]
+            )
+        duration_steps = int(duration_s * sweep_hz)
+        for step_index in range(duration_steps):
+            ratio = step_index / duration_steps
+            smooth = ratio * ratio * (3.0 - 2.0 * ratio)
+            master = start + smooth * (target - start)
+            gripper_targets = np.asarray(
+                (master, master, -master, -master), dtype=float
+            )
+            command = np.concatenate((arm_start, gripper_targets))
+            indices = np.concatenate((arm_indices, gripper_indices))
+            controller.apply_action(
+                ArticulationAction(
+                    joint_positions=command,
+                    joint_indices=indices,
+                )
+            )
+            world.step(render=not headless)
+            global_step += 1
+            if global_step % 30 == 0:
+                measured = robot.get_joint_positions()
+                if measured is not None:
+                    values = {
+                        name: float(measured[index])
+                        for name, index in monitor_indices.items()
+                    }
+                    print(
+                        f"{global_step:5d} "
+                        f"{np.degrees(values['gripper_controller']):9.2f} "
+                        f"{np.degrees(values['gripper_base_to_gripper_left2']):8.2f} "
+                        f"{np.degrees(values['gripper_base_to_gripper_right2']):8.2f} "
+                        f"{np.degrees(values['gripper_base_to_gripper_right3']):8.2f} "
+                        f"{np.degrees(values['gripper_left3_to_gripper_left1']):12.2f} "
+                        f"{np.degrees(values['gripper_right3_to_gripper_right1']):12.2f}",
+                        flush=True,
+                    )
+        print(f"Gripper sweep segment finished: {label}", flush=True)
+    final = robot.get_joint_positions()
+    if final is not None:
+        values = {
+            name: float(final[index]) for name, index in monitor_indices.items()
+        }
+        mirror = np.degrees(values["gripper_left3_to_gripper_left1"]) + np.degrees(
+            values["gripper_right3_to_gripper_right1"]
+        )
+        print(
+            f"Gripper sweep final |L_outer + R_outer| = {abs(mirror):.2f} deg "
+            f"({'SYMMETRIC' if abs(mirror) <= 8.0 else 'ASYMMETRIC'})",
+            flush=True,
+        )
+    print("Gripper sweep completed", flush=True)
 
 # Python 3.11 does not use PATH for dependent DLL lookup on Windows. Keep the
 # Isaac ROS 2 runtime directory registered for the lifetime of the process.
@@ -66,7 +203,7 @@ def build_scene() -> None:
     import numpy as np
     import omni.kit.commands
     import omni.usd
-    from pxr import PhysxSchema, Sdf, UsdPhysics
+    from pxr import Gf, PhysxSchema, Sdf, UsdGeom, UsdPhysics
 
     from isaacsim.core.api import World
     from isaacsim.core.api.objects import DynamicCuboid, FixedCuboid
@@ -84,9 +221,12 @@ def build_scene() -> None:
     import_config.fix_base = True
     import_config.make_default_prim = False
     import_config.create_physics_scene = True
-    # The checked-in Isaac-specific URDF uses mutually compatible limits for
-    # the complete adaptive-gripper mimic chain.
-    import_config.parse_mimic = True
+    # Do not import URDF mimic tags: PhysX 5.1 silently ignores additional
+    # mimic followers of the same reference joint, so the right gripper side
+    # receives no command.  Every inner gripper link is instead driven by its
+    # own explicit angular drive, and the TCP bridge mirrors gripper_controller
+    # onto the followers in software.
+    import_config.parse_mimic = False
     self_collision_mode = os.environ.get(
         "MECHARM_SELF_COLLISION", "selective"
     ).strip().lower()
@@ -171,29 +311,117 @@ def build_scene() -> None:
             "Configured selective robot self-collision; opposing final jaws remain active",
             flush=True,
         )
-    mimic_joints = {
-        "gripper_base_to_gripper_left2": (-42.972, 8.594, 1.0),
-        "gripper_left3_to_gripper_left1": (-8.594, 42.972, -1.0),
-        "gripper_base_to_gripper_right3": (-8.594, 42.972, -1.0),
-        "gripper_base_to_gripper_right2": (-8.594, 42.972, -1.0),
-        "gripper_right3_to_gripper_right1": (-42.972, 8.594, 1.0),
+    driven_inner_limits = {
+        "gripper_base_to_gripper_left2": (-42.972, 8.594),
+        "gripper_base_to_gripper_right3": (-8.594, 42.972),
+        "gripper_base_to_gripper_right2": (-8.594, 42.972),
     }
-    reference_joint_path = f"{ROBOT_PRIM_PATH}/joints/gripper_controller"
-    for joint_name, (lower, upper, urdf_multiplier) in mimic_joints.items():
+    for joint_name, (lower, upper) in driven_inner_limits.items():
         joint_path = f"{ROBOT_PRIM_PATH}/joints/{joint_name}"
         joint = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
         if not joint:
-            raise RuntimeError(f"missing imported gripper joint: {joint_path}")
+            raise RuntimeError(f"missing adaptive-gripper inner joint: {joint_path}")
         joint.GetLowerLimitAttr().Set(lower)
         joint.GetUpperLimitAttr().Set(upper)
-        mimic = PhysxSchema.PhysxMimicJointAPI.Apply(
-            joint.GetPrim(), UsdPhysics.Tokens.rotZ
+        drive = UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "angular")
+        drive.GetStiffnessAttr().Set(300.0)
+        drive.GetDampingAttr().Set(60.0)
+        drive.GetMaxForceAttr().Set(20.0)
+    print("Configured direct-driven adaptive-gripper inner joints", flush=True)
+
+    # The URDF importer gives every revolute joint a very strong default drive.
+    # That is useful for the arm, but it makes the closed gripper loop hunt
+    # around its pin anchors.  Use a softer, critically damped drive only for
+    # the commanded gripper joints; the outer jaw joints remain passive.
+    controller_path = f"{ROBOT_PRIM_PATH}/joints/gripper_controller"
+    controller = UsdPhysics.RevoluteJoint.Get(stage, controller_path)
+    if not controller:
+        raise RuntimeError(f"missing adaptive-gripper controller joint: {controller_path}")
+    controller_drive = UsdPhysics.DriveAPI.Apply(controller.GetPrim(), "angular")
+    controller_drive.GetStiffnessAttr().Set(300.0)
+    controller_drive.GetDampingAttr().Set(60.0)
+    controller_drive.GetMaxForceAttr().Set(20.0)
+    print("Tuned adaptive-gripper drive damping", flush=True)
+
+    # The official URDF is a tree and therefore omits the two distal pin
+    # joints that close the adaptive gripper's four-bar loops.  Make the outer
+    # jaw joints passive and add the missing PhysX loop constraints explicitly.
+    for passive_name in (
+        "gripper_left3_to_gripper_left1",
+        "gripper_right3_to_gripper_right1",
+    ):
+        passive_path = f"{ROBOT_PRIM_PATH}/joints/{passive_name}"
+        passive_joint = UsdPhysics.RevoluteJoint.Get(stage, passive_path)
+        if not passive_joint:
+            raise RuntimeError(f"missing passive adaptive-gripper joint: {passive_path}")
+        passive_prim = passive_joint.GetPrim()
+        passive_prim.RemoveAPI(UsdPhysics.DriveAPI, "angular")
+        # The URDF importer may leave the drive as plain physics attributes
+        # (not an applied DriveAPI), so RemoveAPI alone silently keeps them.
+        # Delete every remaining drive attribute; otherwise the outer jaw is
+        # both pulled by the four-bar loop and spring-driven back to 0, which
+        # makes that side feel loose and unable to exert force.
+        for attribute in list(passive_prim.GetAttributes()):
+            if attribute.GetName().startswith("drive:"):
+                passive_prim.RemoveProperty(attribute.GetName())
+        remaining_drives = [
+            attribute.GetName()
+            for attribute in passive_prim.GetAttributes()
+            if attribute.GetName().startswith("drive:")
+        ]
+        if remaining_drives:
+            raise RuntimeError(
+                f"passive adaptive-gripper joint still has a drive: {passive_path}: "
+                f"{remaining_drives}"
+            )
+    print("Converted outer gripper joints to passive revolute joints", flush=True)
+
+    loop_joints = (
+        (
+            "gripper_left_loop_joint",
+            f"{ROBOT_PRIM_PATH}/gripper_left2",
+            f"{ROBOT_PRIM_PATH}/gripper_left1",
+            (-0.027963, 0.015311, 0.0),
+            (0.006037, 0.021311, 0.0),
+        ),
+        (
+            "gripper_right_loop_joint",
+            f"{ROBOT_PRIM_PATH}/gripper_right2",
+            f"{ROBOT_PRIM_PATH}/gripper_right1",
+            (0.027963, 0.015311, 0.0),
+            (-0.006037, 0.021311, 0.0),
+        ),
+    )
+    for joint_name, body0, body1, local0, local1 in loop_joints:
+        joint_path = f"{ROBOT_PRIM_PATH}/joints/{joint_name}"
+        loop_joint = UsdPhysics.RevoluteJoint.Define(stage, joint_path)
+        loop_joint.CreateBody0Rel().SetTargets([Sdf.Path(body0)])
+        loop_joint.CreateBody1Rel().SetTargets([Sdf.Path(body1)])
+        loop_joint.CreateAxisAttr().Set(UsdPhysics.Tokens.z)
+        loop_joint.CreateLocalPos0Attr().Set(Gf.Vec3f(*local0))
+        loop_joint.CreateLocalPos1Attr().Set(Gf.Vec3f(*local1))
+        loop_joint.CreateLocalRot0Attr().Set(Gf.Quatf(1.0))
+        loop_joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0))
+        loop_joint.CreateCollisionEnabledAttr().Set(False)
+        loop_joint.CreateExcludeFromArticulationAttr().Set(True)
+        if len(loop_joint.GetBody0Rel().GetTargets()) != 1 or len(loop_joint.GetBody1Rel().GetTargets()) != 1:
+            raise RuntimeError(f"failed to create adaptive-gripper loop joint: {joint_path}")
+
+    articulation_api = PhysxSchema.PhysxArticulationAPI.Get(
+        stage, ARTICULATION_ROOT_PATH
+    )
+    if not articulation_api:
+        articulation_api = PhysxSchema.PhysxArticulationAPI.Get(
+            stage, ROBOT_PRIM_PATH
         )
-        mimic.GetReferenceJointRel().SetTargets([Sdf.Path(reference_joint_path)])
-        mimic.GetReferenceJointAxisAttr().Set(UsdPhysics.Tokens.rotZ)
-        # PhysX defines gearing with the opposite sign to URDF multiplier.
-        mimic.GetGearingAttr().Set(-urdf_multiplier)
-        mimic.GetOffsetAttr().Set(0.0)
+    if not articulation_api:
+        raise RuntimeError("missing PhysX articulation API for mechArm")
+    articulation_api.CreateSolverPositionIterationCountAttr().Set(64)
+    articulation_api.CreateSolverVelocityIterationCountAttr().Set(64)
+    print(
+        "Created left/right adaptive-gripper loop pin constraints outside articulation",
+        flush=True,
+    )
 
     # The official adaptive-gripper DAE files contain the linkage plates and
     # pivot holes, but no separate bolt/pin meshes.  PhysX revolute joints are
@@ -208,9 +436,9 @@ def build_scene() -> None:
         ),
         (
             "left_tip_pin",
-            f"{ROBOT_PRIM_PATH}/gripper_left3",
-            (-0.027, 0.016, -0.012),
-            "gripper_left3_to_gripper_left1",
+            f"{ROBOT_PRIM_PATH}/gripper_left1",
+            (0.006037, 0.021311, -0.012),
+            "gripper_left_loop_joint",
         ),
         (
             "right_base_pin",
@@ -220,9 +448,9 @@ def build_scene() -> None:
         ),
         (
             "right_tip_pin",
-            f"{ROBOT_PRIM_PATH}/gripper_right3",
-            (0.027, 0.016, -0.012),
-            "gripper_right3_to_gripper_right1",
+            f"{ROBOT_PRIM_PATH}/gripper_right1",
+            (-0.006037, 0.021311, -0.012),
+            "gripper_right_loop_joint",
         ),
     )
     for pin_name, parent_path, local_position, joint_name in exposed_pins:
@@ -235,7 +463,7 @@ def build_scene() -> None:
         parent = stage.GetPrimAtPath(parent_path)
         if not parent or not parent.IsValid():
             raise RuntimeError(f"missing adaptive-gripper pin parent: {parent_path}")
-        pin_path = f"{parent_path}/visuals/physics_pins/{pin_name}"
+        pin_path = f"{parent_path}/physics_pins/{pin_name}"
         pin = UsdGeom.Cylinder.Define(stage, pin_path)
         pin.CreateAxisAttr().Set(UsdGeom.Tokens.z)
         pin.CreateRadiusAttr().Set(0.0032)
@@ -267,10 +495,16 @@ def build_scene() -> None:
     SCENE_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not save_stage(str(SCENE_PATH)):
         raise RuntimeError(f"failed to save Isaac scene: {SCENE_PATH}")
-    print(f"Saved mechArm experiment scene: {SCENE_PATH}")
+    print(f"Saved mechArm experiment scene: {SCENE_PATH}", flush=True)
 
 
 def main() -> None:
+    print(
+        "Isaac scene request: "
+        f"rebuild={ARGS.rebuild_scene}, build_only={ARGS.build_scene_only}, "
+        f"scene={SCENE_PATH}",
+        flush=True,
+    )
     if TRANSPORT == "ros2":
         enable_extension("isaacsim.ros2.bridge")
         for _ in range(30):
@@ -298,6 +532,9 @@ def main() -> None:
     world.scene.add(robot)
     world.reset()
     robot.initialize()
+    if ARGS.gripper_sweep:
+        run_gripper_sweep(world, robot, headless=ARGS.headless)
+        return
     tcp_bridge = None
     if TRANSPORT == "tcp":
         from tcp_joint_bridge import IsaacTcpJointBridge
@@ -346,5 +583,12 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    finally:
+    except Exception:
+        import traceback
+
+        print("Isaac experiment failed with an exception:", flush=True)
+        traceback.print_exc()
+        simulation_app.close()
+        os._exit(1)
+    else:
         simulation_app.close()
