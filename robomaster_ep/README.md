@@ -23,7 +23,10 @@ SDK 构建目录没有复制进 GitHub，因为它包含约 202 MB 的编译产�
 - `test_chassis_rotate.py`：测试麦轮原地旋转
 - `test_camera.py`：测试摄像头图传
 - `simple_grab.py`：订阅夹爪状态，确认连续收到 `closed` 后返回初始姿态
+- `simple_grab_time_check.py`：以闭合耗时辅助判断夹爪状态
 - `pick_rotate_place.py`：慢速抓取、旋转、放置流程
+- `pick_rotate_place_5_cycles.py`：连续 5 次抓取、搬运和放置
+- `pick_rotate_place_5_cycles_retry.py`：连续 5 次成功抓取、失败重试、50 Hz 夹爪订阅、持续摄像头图传和 `E` 键安全退出
 
 ## 运行方式
 
