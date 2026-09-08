@@ -1,5 +1,7 @@
 # 实验二：机械臂定点抓取
 
+[English version](README_EN.md)
+
 本目录用于 mechArm 270 Pi 自适应夹爪的固定点抓取实验。仿真运行在 Windows Isaac Sim 5.1.0，任务节点运行在 WSL 2 Ubuntu 22.04 / ROS 2 Humble。
 
 当前已建立：
@@ -66,6 +68,28 @@ docker compose -f ".\docker-compose.yml" exec moveit bash -lc "source /opt/ros/h
 
 该流程复用实验二已经验证的关节路点和平滑插值，直接在 Isaac 中完成抓取。MoveIt 碰撞模型保留为后续校准项。详细步骤见 `docs/testing.md`。
 
+当前推荐的笛卡尔垂直抓取流程：
+
+```powershell
+docker compose exec moveit bash -lc "source /opt/ros/humble/setup.bash && source /opt/mecharm_ws/install/setup.bash && ros2 launch mecharm_pick_place cartesian_direct_pick_place.launch.py project_root:=/workspace/mecharm_exp2"
+```
+
+该入口使用数值逆解、垂直末端姿态和 `direct_cartesian_pick_place.yaml` 中的抓取坐标。普通移动速度和垂直升降速度在 `src/mecharm_pick_place/mecharm_pick_place/direct_pick_place_demo.py` 中分别设置。
+
+连续五轮交替抓取（A→B、B→A）：
+
+```powershell
+docker compose exec moveit bash -lc "source /opt/ros/humble/setup.bash && source /opt/mecharm_ws/install/setup.bash && ros2 launch mecharm_pick_place alternating_cartesian_pick_place.launch.py project_root:=/workspace/mecharm_exp2 cycles:=5"
+```
+
+空抓异常测试：
+
+```powershell
+docker compose exec moveit bash -lc "source /opt/ros/humble/setup.bash && source /opt/mecharm_ws/install/setup.bash && ros2 launch mecharm_pick_place empty_grasp_test.launch.py project_root:=/workspace/mecharm_exp2"
+```
+
+测试会在空位置合爪，输出 `EMPTY_GRASP_EXCEPTION code=NO_OBJECT`，随后返回 HOME。
+
 模型导入与场景标定完成后，从 Windows PowerShell 运行（脚本默认使用本机已验证的 `E:\AIRobotic\isaac-sim`）：
 
 ```powershell
@@ -78,11 +102,13 @@ docker compose -f ".\docker-compose.yml" exec moveit bash -lc "source /opt/ros/h
 $env:ISAAC_SIM_ROOT = "D:\path\to\isaac-sim"
 ```
 
-启动一次五轮抓取：
+旧版状态机五次尝试入口（用于兼容性测试）：
 
 ```bash
 ros2 service call /mecharm/start_task std_srvs/srv/Trigger {}
 ```
+
+实验视频整理在 [`docs/videos/`](docs/videos/)，其中 MP4 文件使用 Git LFS 管理。
 
 仿真坐标当前是安全的初始建议值，必须在 Isaac Sim 中核对桌面高度、工具坐标系与可达性后再用于验收。
 
