@@ -110,6 +110,29 @@ ros2 service call /mecharm/start_task std_srvs/srv/Trigger {}
 
 实验视频整理在 [`docs/videos/`](docs/videos/)，其中 MP4 文件使用 Git LFS 管理。
 
+## RoboMaster EP 真机调试
+
+`robomaster_ep/` 保存 DJI RoboMaster EP 的电脑端真机控制脚本，与 Isaac Sim 仿真链路分开。完整环境、SDK、Wi-Fi 连接和安全说明见 [`robomaster_ep/README.md`](robomaster_ep/README.md)。
+
+主要入口：
+
+- `test_ep_connection.py`：测试连接和固件版本；
+- `test_ep_arm.py`：机械臂小幅运动测试；
+- `test_ep_gripper.py`：夹爪开合测试；
+- `pick_rotate_place.py`：单次慢速抓取搬运；
+- `pick_rotate_place_5_cycles.py`：连续五次抓取搬运；
+- `pick_rotate_place_5_cycles_retry.py`：带失败重试、状态订阅和安全退出的五轮流程。
+
+Windows PowerShell 基本启动方式：
+
+```powershell
+conda activate robomaster
+$env:RM_SDK_ROOT = "C:\Users\xhr\RoboMaster-SDK-fixed"
+python "E:\机器人集成小组项目\实验二\robomaster_ep\scripts\test_ep_connection.py"
+```
+
+真机运动前先连接 RoboMaster EP 的 Wi-Fi，并确认机械臂和底盘周围有足够空间。
+
 仿真坐标当前是安全的初始建议值，必须在 Isaac Sim 中核对桌面高度、工具坐标系与可达性后再用于验收。
 
 ## Isaac Sim 场景与旧版内置演示

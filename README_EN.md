@@ -102,6 +102,29 @@ The current Isaac import defaults are arm stiffness `10000` and damping `3000`. 
 
 Experiment recordings are organized under [`docs/videos/`](docs/videos/). MP4 files are tracked with Git LFS because two recordings exceed GitHub's regular-file size limit.
 
+## DJI RoboMaster EP hardware debugging
+
+The `robomaster_ep/` directory contains computer-side scripts for the physical DJI RoboMaster EP. It is kept separate from the Isaac Sim and ROS 2 simulation path. See [`robomaster_ep/README.md`](robomaster_ep/README.md) for the SDK, Wi-Fi connection, DLL, and safety details.
+
+Main scripts include:
+
+- `test_ep_connection.py`: verify the connection and firmware version;
+- `test_ep_arm.py`: small arm-motion test;
+- `test_ep_gripper.py`: gripper open/close test;
+- `pick_rotate_place.py`: one slow pick, rotate, and place cycle;
+- `pick_rotate_place_5_cycles.py`: five consecutive pick-and-place cycles;
+- `pick_rotate_place_5_cycles_retry.py`: five-cycle flow with retries, status subscription, and a safe exit key.
+
+Basic Windows PowerShell setup:
+
+```powershell
+conda activate robomaster
+$env:RM_SDK_ROOT = "C:\Users\xhr\RoboMaster-SDK-fixed"
+python "E:\机器人集成小组项目\实验二\robomaster_ep\scripts\test_ep_connection.py"
+```
+
+Connect the computer to the RoboMaster EP Wi-Fi before running a hardware script. Clear the area around both the arm and the chassis.
+
 ## Model source
 
 The model is based on the Humble branch of Elephant Robotics' official repository:
