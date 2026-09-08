@@ -16,12 +16,16 @@ PICK_GRASP = (23.363, 14.921, 20.671, -47.479, -1.886, 0.0)
 PLACE_SAFE = (-19.315, 0.478, 13.209, -47.445, 12.505, 0.0)
 PLACE_GRASP = (-19.656, 15.759, 15.709, -47.310, 11.583, 0.0)
 
-MAX_ARM_SPEED_RAD_S = math.radians(12.0)
+MAX_ARM_SPEED_RAD_S = math.radians(28.0)
+VERTICAL_ARM_SPEED_RAD_S = math.radians(4.0)
 MAX_GRIPPER_SPEED_RAD_S = 0.10
 MIN_DURATION_S = 1.0
 SETTLE_S = 0.35
 GRIPPER_OPEN = 0.15
 GRIPPER_CLOSED = -0.75
+VERTICAL_STAGE_LABELS = frozenset(
+    {"PICK_GRASP", "LIFT", "PLACE_GRASP", "RETREAT"}
+)
 
 
 def _duration(start, target, max_speed):
@@ -30,8 +34,18 @@ def _duration(start, target, max_speed):
 
 
 def _move(node, label, command, target):
-    duration = _duration(command, target, MAX_ARM_SPEED_RAD_S)
-    node.get_logger().info(f"DIRECT_STAGE {label} duration={duration:.2f}s")
+    # Quintic smoothstep has a peak derivative of 1.875. Account for it so
+    # MAX_ARM_SPEED_RAD_S limits peak speed, rather than average speed.
+    speed = (
+        VERTICAL_ARM_SPEED_RAD_S
+        if label in VERTICAL_STAGE_LABELS
+        else MAX_ARM_SPEED_RAD_S
+    )
+    duration = _duration(command, target, speed / 1.875)
+    node.get_logger().info(
+        f"DIRECT_STAGE {label} duration={duration:.2f}s "
+        f"speed={math.degrees(speed):.1f}deg/s"
+    )
     _execute_segment(node, command, target, duration=duration)
     time.sleep(SETTLE_S)
     return target

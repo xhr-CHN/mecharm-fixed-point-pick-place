@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rebuild-scene", action="store_true")
     parser.add_argument("--smoke-test", action="store_true")
     parser.add_argument("--gripper-sweep", action="store_true")
+    parser.add_argument("--experiment3", action="store_true")
     return parser.parse_args()
 
 
@@ -235,8 +236,8 @@ def build_scene() -> None:
             "MECHARM_SELF_COLLISION must be off, selective, or all"
         )
     import_config.set_self_collision(self_collision_mode != "off")
-    import_config.set_default_drive_strength(10000)
-    import_config.set_default_position_drive_damping(6000)
+    import_config.set_default_drive_strength(1000)
+    import_config.set_default_position_drive_damping(30000)
     import_config.set_collision_from_visuals(True)
     # The 5.1 URDF importer cannot parse a source path containing Chinese
     # characters. Stage the same checked-in assets under a temporary ASCII path.
@@ -324,23 +325,23 @@ def build_scene() -> None:
         joint.GetLowerLimitAttr().Set(lower)
         joint.GetUpperLimitAttr().Set(upper)
         drive = UsdPhysics.DriveAPI.Apply(joint.GetPrim(), "angular")
-        drive.GetStiffnessAttr().Set(300.0)
+        drive.GetStiffnessAttr().Set(150.0)
         drive.GetDampingAttr().Set(60.0)
-        drive.GetMaxForceAttr().Set(20.0)
+        drive.GetMaxForceAttr().Set(10.0)
     print("Configured direct-driven adaptive-gripper inner joints", flush=True)
 
     # The URDF importer gives every revolute joint a very strong default drive.
     # That is useful for the arm, but it makes the closed gripper loop hunt
-    # around its pin anchors.  Use a softer, critically damped drive only for
+    # around its pin anchors. Use a softer drive with retained damping for
     # the commanded gripper joints; the outer jaw joints remain passive.
     controller_path = f"{ROBOT_PRIM_PATH}/joints/gripper_controller"
     controller = UsdPhysics.RevoluteJoint.Get(stage, controller_path)
     if not controller:
         raise RuntimeError(f"missing adaptive-gripper controller joint: {controller_path}")
     controller_drive = UsdPhysics.DriveAPI.Apply(controller.GetPrim(), "angular")
-    controller_drive.GetStiffnessAttr().Set(300.0)
+    controller_drive.GetStiffnessAttr().Set(150.0)
     controller_drive.GetDampingAttr().Set(60.0)
-    controller_drive.GetMaxForceAttr().Set(20.0)
+    controller_drive.GetMaxForceAttr().Set(10.0)
     print("Tuned adaptive-gripper drive damping", flush=True)
 
     # The official URDF is a tree and therefore omits the two distal pin
@@ -472,25 +473,35 @@ def build_scene() -> None:
         UsdGeom.XformCommonAPI(pin).SetTranslate(local_position)
 
     world = World(stage_units_in_meters=1.0)
-    world.scene.add(
-        FixedCuboid(
-            prim_path="/World/work_table",
-            name="work_table",
-            position=np.array([0.14, 0.0, -0.025]),
-            scale=np.array([0.60, 0.50, 0.05]),
-            color=np.array([0.55, 0.40, 0.25]),
+    if ARGS.experiment3:
+        import yaml
+
+        config_path = PROJECT_ROOT / "config/experiment3_sorting.yaml"
+        with config_path.open(encoding="utf-8") as stream:
+            config = yaml.safe_load(stream)["sorting_task"]["ros__parameters"]
+        from experiment3_scene import build_experiment3_fixtures
+
+        build_experiment3_fixtures(world, stage, config)
+    else:
+        world.scene.add(
+            FixedCuboid(
+                prim_path="/World/work_table",
+                name="work_table",
+                position=np.array([0.14, 0.0, -0.025]),
+                scale=np.array([0.60, 0.50, 0.05]),
+                color=np.array([0.55, 0.40, 0.25]),
+            )
         )
-    )
-    world.scene.add(
-        DynamicCuboid(
-            prim_path="/World/target_object",
-            name="target_object",
-            position=np.array([0.18, 0.08, 0.025]),
-            scale=np.array([0.035, 0.035, 0.05]),
-            color=np.array([0.85, 0.15, 0.10]),
-            mass=0.03,
+        world.scene.add(
+            DynamicCuboid(
+                prim_path="/World/target_object",
+                name="target_object",
+                position=np.array([0.18, 0.08, 0.025]),
+                scale=np.array([0.035, 0.035, 0.05]),
+                color=np.array([0.85, 0.15, 0.10]),
+                mass=0.03,
+            )
         )
-    )
     world.reset()
     SCENE_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not save_stage(str(SCENE_PATH)):
@@ -550,7 +561,11 @@ def main() -> None:
         create_ros2_graph(ARTICULATION_ROOT_PATH)
         for _ in range(10):
             simulation_app.update()
-    monitor = GraspMonitor(omni.usd.get_context().get_stage(), robot)
+    monitor_kwargs = {}
+    if ARGS.experiment3:
+        monitor_kwargs["object_root_path"] = "/World/experiment3/objects"
+        monitor_kwargs["joint_path"] = "/World/experiment3/grasp_fixed_joint"
+    monitor = GraspMonitor(omni.usd.get_context().get_stage(), robot, **monitor_kwargs)
     max_steps = 30 if ARGS.smoke_test else None
     print(
         "Starting Isaac control loop: "

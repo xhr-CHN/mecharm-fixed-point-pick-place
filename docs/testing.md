@@ -70,6 +70,37 @@ Isaac 使用 `MECHARM_SELF_COLLISION=selective`：开启 articulation self-colli
 
 若规划失败、关节状态超过 0.5 秒未更新或最终误差超过 0.02 rad，控制器会中止任务并保持当前实测位置。
 
+## 实验三环形分类仿真
+
+实验三复用同一 mechArm 270 Pi 和自适应夹爪。场景中机械臂位于中心，6 个取物网格沿周围环形分布，物体类别为 `tennis_ball` 和 `pencil`，两类分别放入对应料盒。所有目标由检测结果自动选择，启动命令不接受人工网格、类别或料盒参数。
+
+修改代码或首次创建场景后，在 Windows PowerShell 执行：
+
+```powershell
+cd 'E:\机器人集成小组项目\实验二'
+& '.\scripts\start_isaac.ps1' -ProjectRoot 'E:\机器人集成小组项目\实验二' -Experiment3 -RebuildScene -BuildSceneOnly
+```
+
+`-BuildSceneOnly` 只生成并保存 USD，随后 Isaac 进程会退出。完成场景重建后，必须在第一个 PowerShell 窗口再次启动持续运行的 Isaac 控制循环，并保持该窗口开启：
+
+```powershell
+& '.\scripts\start_isaac.ps1' -ProjectRoot 'E:\机器人集成小组项目\实验二' -Experiment3
+```
+
+看到 `Isaac TCP joint bridge listening on 0.0.0.0:8765` 后，再打开第二个 PowerShell 窗口启动 ROS 2 Launch。由于 Isaac 已在第一个窗口运行，Launch 使用 `start_isaac:=false`：
+
+然后在 Docker 的 `moveit` 服务内启动完整分类图：
+
+```powershell
+docker compose -f '.\docker-compose.yml' exec moveit bash -lc "source /opt/ros/humble/setup.bash && colcon --log-base /opt/mecharm_ws/log build --base-paths /workspace/mecharm_exp2/simulation/urdf/mycobot_description /workspace/mecharm_exp2/src --build-base /opt/mecharm_ws/build --install-base /opt/mecharm_ws/install --symlink-install && source /opt/mecharm_ws/install/setup.bash && ros2 launch mecharm_pick_place experiment3_sorting.launch.py project_root:=/workspace/mecharm_exp2 config:=/workspace/mecharm_exp2/config/experiment3_sorting.yaml start_isaac:=false"
+```
+
+保持上述两个窗口运行，再打开第三个 PowerShell 窗口检查话题。Launch 被 Ctrl+C 停止后，所有话题都会消失，此时再执行 `ros2 topic echo` 会得到 `topic does not appear to be published yet`。
+
+预期话题和证据：`/camera/image_raw`、`/mecharm/detections`、`/mecharm/sorting_status`、`/mecharm/sorting_result`，以及 `/workspace/mecharm_exp2/results/experiment3/` 下的日志。正常场景应记录 6 个目标，至少 5 个成功结果，并且机械臂返回 HOME。
+
+异常场景使用 `config/experiment3_exception_empty_unknown.yaml` 和 `config/experiment3_exception_unreachable.yaml`，分别检查 `EMPTY_GRID`、`UNKNOWN_CLASS`、`UNREACHABLE` 或 `SAFE_STOP`。实验三所有结果只保存到本地，不执行 GitHub 同步。
+
 ## 验收
 
 场景每次恢复初始状态后运行一次，共五次。至少四次完成抓取、搬运、释放和回零；全程不得触碰桌面、越过关节限位、明显振荡或让方块吸附时跳变。

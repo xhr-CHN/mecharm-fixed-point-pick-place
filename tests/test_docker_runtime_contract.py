@@ -13,6 +13,7 @@ def test_dockerfile_contains_clean_humble_moveit_runtime():
         "fastdds-tools",
         "ros-humble-moveit",
         "ros-humble-control-msgs",
+        "ros-humble-vision-msgs",
         "python3-colcon-common-extensions",
     ):
         assert token in dockerfile

@@ -30,6 +30,10 @@ setup(
             "direct_motion_probe = mecharm_pick_place.direct_motion_probe:main",
             "direct_pick_place_demo = mecharm_pick_place.direct_pick_place_demo:main",
             "cartesian_direct_pick_place = mecharm_pick_place.cartesian_direct_pick_place:main",
+            "empty_grasp_test = mecharm_pick_place.empty_grasp_test:main",
+            "sim_object_detector = mecharm_pick_place.sim_object_detector:main",
+            "sim_camera_node = mecharm_pick_place.sim_camera_node:main",
+            "sorting_task_node = mecharm_pick_place.sorting_task_node:main",
         ],
     },
 )

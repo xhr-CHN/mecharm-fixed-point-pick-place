@@ -7,6 +7,9 @@ ROOT = Path("src/mecharm_pick_place")
 SOURCE = (ROOT / "mecharm_pick_place/cartesian_direct_pick_place.py").read_text(
     encoding="utf-8"
 )
+ALTERNATING_LAUNCH = (ROOT / "launch/alternating_cartesian_pick_place.launch.py").read_text(
+    encoding="utf-8"
+)
 
 
 def test_cartesian_direct_mode_uses_collision_free_ik_and_vertical_tool():
@@ -44,3 +47,10 @@ def test_gripper_closes_before_approach_then_opens_descends_and_closes():
     assert "GRIPPER_OPEN_ABOVE_OBJECT" not in SOURCE
     assert 'node.solve("PLACE_GRASP", place, pick_close, command, grasp_tool_x)' in SOURCE
     assert 'grasp_yaw_offset_deg' in SOURCE
+
+
+def test_alternating_launch_defaults_to_five_cycles():
+    assert 'DeclareLaunchArgument("cycles", default_value="5")' in ALTERNATING_LAUNCH
+    assert 'name="cartesian_direct_pick_place"' in ALTERNATING_LAUNCH
+    assert "cycle_index % 2 == 1" in SOURCE
+    assert '"CYCLE_START index=' in SOURCE

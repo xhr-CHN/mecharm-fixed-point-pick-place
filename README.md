@@ -105,6 +105,18 @@ exec(open(r"E:\机器人集成小组项目\实验二\simulation\isaac\auto_demo_
 
 该脚本只保留作模型调试，不再作为实验主流程。主流程由 MoveIt 2 规划完整轨迹，通过 ROS 2 action 逐点执行。
 
+## 实验三环形分类仿真
+
+实验三在本地复用本实验的 Elephant Robotics mechArm 270 Pi 和自适应夹爪。机械臂位于桌面中央，网球和铅笔共 6 个物体沿机械臂周围的六边形环形网格分布。仿真分类入口为 `src/mecharm_pick_place/launch/experiment3_sorting.launch.py`，配置为 `config/experiment3_sorting.yaml`。
+
+重建环形场景：
+
+```powershell
+& '.\scripts\start_isaac.ps1' -ProjectRoot 'E:\机器人集成小组项目\实验二' -Experiment3 -RebuildScene -BuildSceneOnly
+```
+
+ROS 2 启动命令、检测话题、异常场景和验收标准见 `docs/testing.md`。实验三结果只写入 `results/experiment3/`，本项目不执行 GitHub 同步。
+
 ## 模型来源
 
 模型取自 Elephant Robotics 官方 `mycobot_ros2` 仓库 Humble 分支：

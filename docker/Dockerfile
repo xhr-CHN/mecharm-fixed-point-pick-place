@@ -10,12 +10,14 @@ RUN apt-get update \
         ros-humble-control-msgs \
         ros-humble-moveit \
         ros-humble-moveit-configs-utils \
+        ros-humble-vision-msgs \
         ros-humble-trajectory-msgs \
         ros-humble-xacro \
     && rm -rf /var/lib/apt/lists/*
 
 COPY docker/entrypoint.sh /ros_entrypoint_exp2.sh
-RUN chmod +x /ros_entrypoint_exp2.sh
+RUN sed -i 's/\r$//' /ros_entrypoint_exp2.sh \
+    && chmod +x /ros_entrypoint_exp2.sh
 
 WORKDIR /workspace/mecharm_exp2
 ENTRYPOINT ["/ros_entrypoint_exp2.sh"]

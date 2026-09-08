@@ -5,7 +5,8 @@ param(
     [switch]$BuildSceneOnly,
     [switch]$RebuildScene,
     [switch]$SmokeTest,
-    [switch]$GripperSweep
+    [switch]$GripperSweep,
+    [switch]$Experiment3
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +58,9 @@ if ($SmokeTest) {
 }
 if ($GripperSweep) {
     $arguments += '--gripper-sweep'
+}
+if ($Experiment3) {
+    $arguments += '--experiment3'
 }
 
 Write-Host 'Launching Isaac Sim experiment entry point...'

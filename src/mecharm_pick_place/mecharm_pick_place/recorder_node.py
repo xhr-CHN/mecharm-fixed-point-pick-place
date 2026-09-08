@@ -10,6 +10,7 @@ import shutil
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 
@@ -43,7 +44,14 @@ class PickPlaceRecorderNode(Node):
 
         self.create_subscription(String, "/mecharm/task_status", self._record_event, 50)
         self.create_subscription(String, "/mecharm/task_result", self._record_result, 10)
-        self.create_subscription(JointState, "/joint_states", self._record_joint_state, 100)
+        state_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=100,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+        )
+        self.create_subscription(
+            JointState, "/joint_states", self._record_joint_state, state_qos
+        )
         self.get_logger().info(f"recording experiment results in {self.run_dir}")
 
     def _record_event(self, msg: String) -> None:

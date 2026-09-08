@@ -16,6 +16,7 @@ from .numeric_ik import UrdfNumericIK
 class CartesianDirectPickPlace(DirectMotionProbe):
     def __init__(self):
         super().__init__(node_name="cartesian_direct_pick_place")
+        self.declare_parameter("cycles", 1)
         self.declare_parameter("pick_xyz", [0.18, 0.08, 0.025])
         self.declare_parameter("place_xyz", [0.18, -0.08, 0.025])
         # Keep the open gripper safely above the object during approach.
@@ -76,6 +77,31 @@ class CartesianDirectPickPlace(DirectMotionProbe):
         return positions + (seed[6],)
 
 
+def _run_cycle(node, command, source_xyz, destination_xyz, grasp_tool_x, cycle_index):
+    node.get_logger().info(
+        f"CYCLE_START index={cycle_index} source={source_xyz} destination={destination_xyz}"
+    )
+    pregrasp = float(node.get_parameter("pregrasp_clearance").value)
+    pick_close = float(node.get_parameter("pick_close_clearance").value)
+    closed_position = float(node.get_parameter("gripper_closed").value)
+    open_position = float(node.get_parameter("gripper_open").value)
+    command = _move(node, "PICK_PREGRASP", command, node.solve(
+        "PICK_PREGRASP", source_xyz, pregrasp, command, grasp_tool_x))
+    command = _move(node, "PICK_GRASP", command, node.solve(
+        "PICK_GRASP", source_xyz, pick_close, command, grasp_tool_x))
+    command = node.move_gripper("GRIPPER_CLOSE_ON_OBJECT", command, closed_position)
+    command = _move(node, "LIFT", command, node.solve(
+        "LIFT", source_xyz, pregrasp, command, grasp_tool_x))
+    command = _move(node, "PLACE_PREGRASP", command, node.solve(
+        "PLACE_PREGRASP", destination_xyz, pregrasp, command, grasp_tool_x))
+    command = _move(node, "PLACE_GRASP", command, node.solve(
+        "PLACE_GRASP", destination_xyz, pick_close, command, grasp_tool_x))
+    command = node.move_gripper("GRIPPER_OPEN_TO_RELEASE", command, open_position)
+    command = _move(node, "RETREAT", command, node.solve(
+        "RETREAT", destination_xyz, pregrasp, command, grasp_tool_x))
+    return _move_arm(node, "RETURN_HOME", command, HOME)
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = None
@@ -112,46 +138,16 @@ def main(args=None):
         node.get_logger().info(
             f"GRASP_YAW_OFFSET deg={math.degrees(yaw):.1f}"
         )
-        command = _move(
-            node,
-            "PICK_PREGRASP",
-            command,
-            node.solve("PICK_PREGRASP", pick, pregrasp, command, grasp_tool_x),
+        cycles = max(1, int(node.get_parameter("cycles").value))
+        for cycle_index in range(1, cycles + 1):
+            source = pick if cycle_index % 2 == 1 else place
+            destination = place if cycle_index % 2 == 1 else pick
+            command = _run_cycle(
+                node, command, source, destination, grasp_tool_x, cycle_index
+            )
+        node.get_logger().info(
+            f"CARTESIAN_DIRECT_PICK_PLACE_SUCCESS cycles={cycles}"
         )
-        command = _move(
-            node,
-            "PICK_GRASP",
-            command,
-            node.solve("PICK_GRASP", pick, pick_close, command, grasp_tool_x),
-        )
-        command = node.move_gripper("GRIPPER_CLOSE_ON_OBJECT", command, closed_position)
-        command = _move(
-            node,
-            "LIFT",
-            command,
-            node.solve("LIFT", pick, pregrasp, command, grasp_tool_x),
-        )
-        command = _move(
-            node,
-            "PLACE_PREGRASP",
-            command,
-            node.solve("PLACE_PREGRASP", place, pregrasp, command, grasp_tool_x),
-        )
-        command = _move(
-            node,
-            "PLACE_GRASP",
-            command,
-            node.solve("PLACE_GRASP", place, pick_close, command, grasp_tool_x),
-        )
-        command = node.move_gripper("GRIPPER_OPEN_TO_RELEASE", command, open_position)
-        command = _move(
-            node,
-            "RETREAT",
-            command,
-            node.solve("RETREAT", place, pregrasp, command, grasp_tool_x),
-        )
-        _move_arm(node, "RETURN_HOME", command, HOME)
-        node.get_logger().info("CARTESIAN_DIRECT_PICK_PLACE_SUCCESS")
     except RuntimeError as error:
         if node is not None:
             node.get_logger().error(str(error))

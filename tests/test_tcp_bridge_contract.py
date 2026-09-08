@@ -6,6 +6,12 @@ ISAAC = (ROOT / "simulation/isaac/tcp_joint_bridge.py").read_text(encoding="utf-
 ROS = (
     ROOT / "src/mecharm_pick_place/mecharm_pick_place/tcp_bridge_node.py"
 ).read_text(encoding="utf-8")
+TRAJECTORY = (
+    ROOT / "src/mecharm_pick_place/mecharm_pick_place/trajectory_controller_node.py"
+).read_text(encoding="utf-8")
+RECORDER = (
+    ROOT / "src/mecharm_pick_place/mecharm_pick_place/recorder_node.py"
+).read_text(encoding="utf-8")
 
 
 def test_tcp_bridge_preserves_existing_ros_topic_contract():
@@ -28,3 +34,14 @@ def test_tcp_bridge_preserves_existing_ros_topic_contract():
 def test_grasp_monitor_does_not_attach_from_pregrasp_height():
     monitor = (ROOT / "simulation/isaac/grasp_monitor.py").read_text(encoding="utf-8")
     assert "attach_distance=0.08" in monitor
+
+
+def test_joint_state_subscribers_match_best_effort_tcp_publisher():
+    assert "ReliabilityPolicy.BEST_EFFORT" in ROS
+    assert "ReliabilityPolicy.BEST_EFFORT" in TRAJECTORY
+    assert "ReliabilityPolicy.BEST_EFFORT" in RECORDER
+
+
+def test_ctrl_c_shutdown_is_idempotent():
+    assert "if rclpy.ok():" in ROS
+    assert "if rclpy.ok():" in TRAJECTORY

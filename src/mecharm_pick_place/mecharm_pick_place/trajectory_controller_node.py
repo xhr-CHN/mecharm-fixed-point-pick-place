@@ -11,6 +11,7 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
 from trajectory_msgs.msg import JointTrajectoryPoint
@@ -53,8 +54,19 @@ class IsaacTrajectoryController(Node):
         self._last_arm_target = tuple(0.0 for _ in ARM_JOINTS)
         self._gripper_target = self.gripper_open
         group = ReentrantCallbackGroup()
+        state_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=20,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+        )
         self._command_pub = self.create_publisher(JointState, "/mecharm/joint_target", 20)
-        self.create_subscription(JointState, "/joint_states", self._on_joint_state, 20, callback_group=group)
+        self.create_subscription(
+            JointState,
+            "/joint_states",
+            self._on_joint_state,
+            state_qos,
+            callback_group=group,
+        )
         self.create_subscription(Float64, "/mecharm/gripper_command", self._on_gripper, 10, callback_group=group)
         self._action = ActionServer(
             self,
@@ -184,4 +196,5 @@ def main(args=None):
     finally:
         executor.shutdown()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()

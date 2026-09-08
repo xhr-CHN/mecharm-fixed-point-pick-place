@@ -22,6 +22,12 @@ def test_direct_sequence_contains_calibrated_pick_place_stages():
     assert "moveit" not in SOURCE.lower()
 
 
+def test_direct_motion_uses_separate_normal_and_vertical_speeds():
+    assert "MAX_ARM_SPEED_RAD_S = math.radians(28.0)" in SOURCE
+    assert "VERTICAL_ARM_SPEED_RAD_S = math.radians(8.0)" in SOURCE
+    assert '"PICK_GRASP", "LIFT", "PLACE_GRASP", "RETREAT"' in SOURCE
+
+
 def test_direct_launch_starts_only_tcp_bridge_and_direct_demo():
     assert 'executable="isaac_tcp_bridge"' in LAUNCH
     assert 'executable="direct_pick_place_demo"' in LAUNCH

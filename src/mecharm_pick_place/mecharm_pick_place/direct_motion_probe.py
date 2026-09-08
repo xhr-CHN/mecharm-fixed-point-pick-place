@@ -27,7 +27,7 @@ class DirectMotionProbe(Node):
         super().__init__(node_name)
         state_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
-            depth=10,
+            depth=1,
             reliability=ReliabilityPolicy.BEST_EFFORT,
         )
         self.publisher = self.create_publisher(
@@ -37,11 +37,15 @@ class DirectMotionProbe(Node):
             JointState, "/joint_states", self._state_callback, state_qos
         )
         self.positions = None
+        self.state_sequence = 0
 
     def _state_callback(self, message):
         values = dict(zip(message.name, message.position))
         if all(name in values for name in JOINT_NAMES):
-            self.positions = tuple(float(values[name]) for name in JOINT_NAMES)
+            positions = tuple(float(values[name]) for name in JOINT_NAMES)
+            if all(math.isfinite(value) for value in positions):
+                self.positions = positions
+                self.state_sequence += 1
 
     def publish_positions(self, positions):
         message = JointState()
@@ -53,21 +57,39 @@ class DirectMotionProbe(Node):
 
 def _smoothstep(value):
     value = min(1.0, max(0.0, value))
-    return value * value * (3.0 - 2.0 * value)
+    return value * value * value * (value * (value * 6.0 - 15.0) + 10.0)
 
 
 def _execute_segment(node, start, target, duration=3.0, rate_hz=120.0):
-    started = time.monotonic()
+    if duration <= 0.0 or rate_hz <= 0.0:
+        raise ValueError("duration and rate_hz must be positive")
     period = 1.0 / rate_hz
+    elapsed = 0.0
+    # Use elapsed time without coupling motion speed to feedback frequency.
+    # Cap a scheduling gap to two periods to avoid catch-up target jumps.
+    rclpy.spin_once(node, timeout_sec=0.0)
+    sequence = node.state_sequence
+    node.publish_positions(start)
+    last_feedback = time.monotonic()
+    previous_tick = last_feedback
     while rclpy.ok():
-        elapsed = time.monotonic() - started
+        tick = time.monotonic()
+        rclpy.spin_once(node, timeout_sec=0.0)
+        if node.state_sequence != sequence:
+            sequence = node.state_sequence
+            last_feedback = tick
+        feedback_age = tick - last_feedback
+        if feedback_age > 5.0:
+            raise RuntimeError("DIRECT_MOTION_FEEDBACK_TIMEOUT: holding last target")
+        if feedback_age <= 0.25:
+            elapsed = min(duration, elapsed + min(tick - previous_tick, 2.0 * period))
+        previous_tick = tick
         ratio = _smoothstep(elapsed / duration)
         command = tuple(a + ratio * (b - a) for a, b in zip(start, target))
         node.publish_positions(command)
-        rclpy.spin_once(node, timeout_sec=0.0)
         if elapsed >= duration:
             break
-        time.sleep(period)
+        time.sleep(max(0.0, period - (time.monotonic() - tick)))
 
 
 def main(args=None):
