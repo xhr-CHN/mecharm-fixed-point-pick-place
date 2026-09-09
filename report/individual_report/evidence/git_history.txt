@@ -1,0 +1,31 @@
+c8c5310|2026-09-08|xhr-CHN|docs: remove experiment three references from readmes
+f2cc6cd|2026-09-08|xhr-CHN|docs: add RoboMaster EP hardware debugging
+324ea5f|2026-09-08|xhr-CHN|docs: update experiment two README in Chinese and English
+50f8de2|2026-09-08|xhr-CHN|feat: add alternating grasp tests and experiment recordings
+8339c04|2026-09-08|xhr-CHN|chore: sync latest RoboMaster EP scripts
+381ce4b|2026-09-08|xhr-CHN|docs: design low-speed S-Curve motion
+4e6f3d2|2026-09-08|xhr-CHN|feat: add retry and multi-cycle EP grasp scripts
+f2458ac|2026-09-08|xhr-CHN|feat: organize RoboMaster EP control scripts
+5140448|2026-09-07|xhr-CHN|tune: sync grasp pose and Isaac drive parameters
+ac41e48|2026-09-07|xhr-CHN|tune: raise pregrasp clearance before closing
+8220502|2026-09-07|xhr-CHN|fix: stabilize adaptive gripper loop physics and refresh scene
+5943a0b|2026-09-02|xhr-CHN|docs: document reproducible direct grasp workflow
+c5863e9|2026-09-02|xhr-CHN|feat: add calibrated direct Cartesian grasping
+0026efe|2026-09-02|xhr-CHN|feat: add containerized Isaac TCP runtime
+d5a2ef3|2026-09-01|xhr-CHN|docs: design parallel gripper evaluation
+fd7be61|2026-09-01|xhr-CHN|fix: enable end-to-end pick-and-place transport
+f4d5e93|2026-09-01|xhr-CHN|fix: execute Isaac ROS graph every physics step
+2a51a7f|2026-09-01|xhr-CHN|feat: add collision-aware pick and place workflow
+612ac43|2026-09-01|xhr-CHN|feat: bridge MoveIt trajectories to Isaac Sim
+5fb030b|2026-09-01|xhr-CHN|feat: add mechArm MoveIt 2 configuration
+64ed724|2026-09-01|xhr-CHN|docs: plan MoveIt 2 Isaac trajectory integration
+35213e6|2026-09-01|xhr-CHN|docs: design MoveIt 2 Isaac trajectory integration
+ff511b7|2026-09-01|xhr-CHN|feat: add smooth in-app pick-and-place demo
+4739d15|2026-09-01|xhr-CHN|feat: stabilize Isaac Sim scene integration
+377ab33|2026-09-01|xhr-CHN|feat: add mechArm adaptive gripper assets
+a25b4b2|2026-08-31|xhr-CHN|feat: add ROS 2 task and Isaac Sim integration
+a76926e|2026-08-31|xhr-CHN|build: add ROS 2 package metadata
+78cee83|2026-08-31|xhr-CHN|docs: add simulation configuration and design
+5fbc899|2026-08-31|xhr-CHN|docs: add simulation configuration and design
+af1df30|2026-08-31|xhr-CHN|chore: add top-level experiment directories
+850bc65|2026-08-31|xhr-CHN|docs: add experiment overview
