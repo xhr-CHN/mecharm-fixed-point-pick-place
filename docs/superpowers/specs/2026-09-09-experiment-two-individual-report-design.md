@@ -31,7 +31,7 @@ The report will support personal-contribution statements with repository and exp
 - Simulation: Isaac Sim scene image, successful five-cycle simulation frames, and the preserved failure-case frames.
 - Mechanical debugging: adaptive-gripper linkage/pin analysis and repair figures.
 - Runtime evidence: ROS 2/Docker/TCP architecture, direct-motion probe output, numerical IK checks, S-curve trajectory design, and exception handling.
-- Physical evidence: RoboMaster EP five-cycle recording frames and the implemented retry/safe-exit logic, while clearly distinguishing this work from the guide's Jetson Orin plus physical mechArm 270 target.
+- Physical evidence: RoboMaster EP five-cycle recording frames and the implemented retry/safe-exit logic. Because the available laboratory hardware differed from the simulated arm, the completed experiment used mechArm 270 in simulation and DJI RoboMaster EP for physical verification.
 - Lightweight verification: include the observed build result and the latest test result honestly, including known stale contract-test assertions.
 
 No Experiment 3 files, results, or descriptions will appear in the report.
@@ -68,7 +68,7 @@ Claims will be phrased as `I implemented`, `I diagnosed`, `I verified`, or `I re
 
 ## Accuracy Boundaries
 
-- Do not claim that the physical Jetson Orin plus mechArm 270 acceptance test was completed.
+- State that both the simulation and physical stages were completed: mechArm 270 was used in Isaac Sim, while DJI RoboMaster EP was used for the real-robot stage because of equipment availability. Do not introduce a Jetson requirement that does not apply to this experiment.
 - Do not convert video evidence into an invented machine-readable success table.
 - Do not claim full automated regression success when two stale contract assertions remain.
 - Do not describe Git commits as proof that no one else participated; use them only as evidence of the author's own sustained implementation work.
